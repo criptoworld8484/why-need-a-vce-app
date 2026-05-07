@@ -28,18 +28,23 @@ La aplicación se abrirá en: http://localhost:8502
 
 ## Requisitos
 
-- **Python 3.10 o superior**
-- **Streamlit**
+- **Python 3.10+**
+- **Streamlit 1.54+** (para timer optimizado)
 - **Google Gemini API Key** (opcional, para OCR)
 
 ### Dependencias
 
 ```
-streamlit
-google-generativeai
-Pillow
-streamlit-autorefresh
+streamlit>=1.54.0
+streamlit-autorefresh>=1.0.0
+google-genai>=1.0.0
+Pillow>=10.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+cryptography>=41.0.0
 ```
+
+**Nota:** Se requiere Streamlit 1.54+ para mejor rendimiento del timer (soporte nativo de fragments).
 
 ---
 

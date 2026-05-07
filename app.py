@@ -12,6 +12,9 @@ import shutil
 import zipfile
 import io
 
+# Check for st.fragment support (Streamlit 1.54+)
+ST_FRAGMENT_AVAILABLE = hasattr(st, 'fragment')
+
 from src.paths import get_app_dir, get_data_dir
 from src.api_key_manager import save_api_key, load_api_key, has_api_key
 
@@ -33,6 +36,12 @@ try:
     GENAI_AVAILABLE = True
 except:
     GENAI_AVAILABLE = False
+
+try:
+    from streamlit_autorefresh import st_autorefresh
+    STREAMLIT_AUTOREFRESH_AVAILABLE = True
+except ImportError:
+    STREAMLIT_AUTOREFRESH_AVAILABLE = False
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Gestión de Preguntas", layout="wide", page_icon="📚")
@@ -1445,9 +1454,14 @@ elif pestana_seleccionada == "🎮 Simulador":
                 minutos = int(tiempo_restante // 60)
                 segundos = int(tiempo_restante % 60)
                 
-                # Usar Streamlit autoRefresh cada segundo
-                from streamlit_autorefresh import st_autorefresh
-                st_autorefresh(interval=1000, limit=None, key="timer_refresh")
+                # Usar Streamlit autoRefresh cada segundo (importado al inicio del archivo)
+                if STREAMLIT_AUTOREFRESH_AVAILABLE:
+                    st_autorefresh(interval=1000, limit=None, key="timer_refresh")
+                else:
+                    # Fallback: Force rerun con st.empty si no hay autorefresh
+                    st.warning("⚠️ Instala streamlit-autorefresh para timer fluido: pip install streamlit-autorefresh")
+                    time.sleep(1)
+                    st.rerun()
                 
                 # Determinar color según el tiempo restante
                 if tiempo_restante < 60:

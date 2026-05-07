@@ -32,3 +32,9 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.bak
+temp_*.png
+app.py.backup
+
+# Streamlit
+.streamlit/
+*.streamlit_cache
