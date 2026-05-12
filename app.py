@@ -49,382 +49,593 @@ st.set_page_config(page_title="Gestión de Preguntas", layout="wide", page_icon=
 # ✅ CSS ULTRA MEJORADO PARA CHECKBOXES Y ANIMACIONES
 st.markdown("""
 <style>
-    /* ===== FUENTES GRANDES Y BORDES GRUESOS ===== */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap');
 
-    /* Títulos principales */
-    h1, h2, h3 {
-        font-weight: 800 !important;
-        letter-spacing: -0.5px !important;
+    :root {
+        --primary: #1e293b;
+        --primary-light: #334155;
+        --accent: #10b981;
+        --accent-hover: #059669;
+        --selection-bg: #fef08a;
+        --selection-border: #facc15;
+        --selection-text: #1e293b;
+        --error: #ef4444;
+        --error-hover: #dc2626;
+        --bg-main: #f8fafc;
+        --bg-card: #ffffff;
+        --text-main: #1e293b;
+        --text-body: #334155;
+        --text-muted: #64748b;
+        --border-color: #e2e8f0;
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        --radius-md: 12px;
+        --radius-lg: 16px;
     }
 
-    /* Labels y textos */
-    label, .stRadio label, div[data-testid="stRadio"] label {
-        font-size: 16px !important;
+    /* Global Styles */
+    .stApp {
+        background-color: var(--bg-main) !important;
+        font-family: 'Inter', sans-serif !important;
+        color: var(--text-body) !important;
+    }
+
+    /* ===== TEXTO GENERAL LEGIBLE ===== */
+    .stApp p, .stApp span, .stApp div, .stApp li, .stApp td, .stApp th {
+        color: var(--text-body) !important;
+    }
+    
+    h1, h2, h3, h4, h5, h6, .stHeader {
+        font-family: 'Outfit', sans-serif !important;
+        color: var(--primary) !important;
+        font-weight: 700 !important;
+    }
+
+    /* Markdown containers */
+    div[data-testid="stMarkdownContainer"] p {
+        color: var(--text-body) !important;
+    }
+
+    /* Custom Noise Background */
+    .stApp::before {
+        content: "";
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        opacity: 0.03;
+        z-index: -1;
+        pointer-events: none;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    }
+
+    /* ===== EXPANDERS LEGIBLES ===== */
+    .streamlit-expanderHeader {
+        background: white !important;
+        color: var(--primary) !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: var(--radius-md) !important;
+        font-family: 'Outfit', sans-serif !important;
         font-weight: 600 !important;
     }
 
-    /* ===== CHECKBOXES SUPER VISIBLES ===== */
+    .streamlit-expanderHeader:hover {
+        background: #fef9c3 !important;
+    }
 
-    /* Contenedor del checkbox */
-    div[data-testid="stCheckbox"] {
-        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
-        border: 4px solid #22c55e !important;
-        border-radius: 12px !important;
+    .streamlit-expanderHeader button {
+        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
+        background-color: #fef08a !important;
+        color: var(--selection-text) !important;
+        border: 1px solid var(--selection-border) !important;
+        font-family: 'Outfit', sans-serif !important;
+        font-weight: 600 !important;
+    }
+
+    .streamlit-expanderHeader button:hover {
+        background: linear-gradient(135deg, #facc15 0%, #fef08a 100%) !important;
+        background-color: #facc15 !important;
+    }
+
+    /* Contenido del expander - fondo blanco */
+    .streamlit-expanderContent {
+        background: white !important;
+        color: var(--text-body) !important;
+    }
+
+    /* Contenido interno del expander (secciones) */
+    .streamlit-expanderContent > div {
+        background: white !important;
         padding: 16px !important;
-        margin: 10px 0 !important;
-        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3) !important;
-        transition: all 0.3s ease !important;
     }
 
-    div[data-testid="stCheckbox"]:hover {
-        background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%) !important;
-        border-color: #16a34a !important;
-        box-shadow: 0 6px 16px rgba(34, 197, 94, 0.5) !important;
-        transform: translateY(-3px) !important;
+    .streamlit-expanderContent section {
+        background: white !important;
+        border: none !important;
     }
 
-    /* Input checkbox - SUPER GRANDE Y VERDE */
-    div[data-testid="stCheckbox"] input[type="checkbox"] {
-        width: 36px !important;
-        height: 36px !important;
-        accent-color: #10b981 !important;
+    /* ===== EXPANDER SUMMARY (el elemento clickeable) ===== */
+    /* Summary - elemento nativo del expander */
+    details.streamlit-expander summary,
+    .streamlit-expander summary,
+    [data-testid="stExpander"] summary,
+    .st-emotion-cache-11ofl8m {
+        background-color: #fef08a !important;
+        background: #fef08a !important;
+        background-image: none !important;
+        color: #1e293b !important;
+        list-style: none !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
         cursor: pointer !important;
-        border: 4px solid #10b981 !important;
-        border-radius: 8px !important;
+        transition: none !important;
+        padding: 12px 16px !important;
+        border-radius: var(--radius-md) !important;
+        border: 1px solid #facc15 !important;
     }
 
-    /* Label del checkbox */
+    /* Quitar el triángulo default del browser */
+    details.streamlit-expander summary::-webkit-details-marker,
+    .streamlit-expander summary::-webkit-details-marker {
+        display: none !important;
+    }
+
+    details.streamlit-expander summary::marker,
+    .streamlit-expander summary::marker {
+        display: none !important;
+    }
+
+    /* Hover summary - mismo color, sin animación */
+    details.streamlit-expander summary:hover,
+    .streamlit-expander summary:hover,
+    [data-testid="stExpander"] summary:hover,
+    .st-emotion-cache-11ofl8m:hover {
+        background-color: #fef08a !important;
+        background: #fef08a !important;
+        background-image: none !important;
+        color: #1e293b !important;
+        transition: none !important;
+        transform: none !important;
+    }
+
+    /* Span dentro del summary - texto principal */
+    details.streamlit-expander summary span,
+    .streamlit-expander summary span,
+    .st-emotion-cache-nwb5ao {
+        color: #1e293b !important;
+        font-weight: 600 !important;
+        font-family: 'Outfit', sans-serif !important;
+    }
+
+    /* Estilos para el header del expander cuando está expandido */
+    .streamlit-expanderHeader {
+        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
+        background-color: #fef08a !important;
+        color: var(--selection-text) !important;
+        border: 1px solid var(--selection-border) !important;
+    }
+
+    .streamlit-expanderHeader:hover {
+        background: linear-gradient(135deg, #facc15 0%, #fef08a 100%) !important;
+        background-color: #facc15 !important;
+    }
+
+    /* Botones dentro del contenido expandido */
+    .streamlit-expanderContent button {
+        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
+        background-color: #fef08a !important;
+        color: var(--selection-text) !important;
+        border: 1px solid var(--selection-border) !important;
+    }
+
+    .streamlit-expanderContent button:hover {
+        background: linear-gradient(135deg, #facc15 0%, #fef08a 100%) !important;
+        background-color: #facc15 !important;
+    }
+
+    /* Inputs dentro del expander */
+    .streamlit-expanderContent input {
+        background: white !important;
+        color: var(--text-body) !important;
+        border: 1px solid var(--border-color) !important;
+    }
+
+    /* Labels dentro del expander */
+    .streamlit-expanderContent label {
+        color: var(--selection-text) !important;
+    }
+
+    /* Section con emotion-cache - fondo claro */
+    section[class*="emotion-cache"],
+    .st-emotion-cache-1k,
+    .st-emotion-cache-1g2m64y,
+    [data-testid="stForm"] {
+        background-color: var(--bg-card) !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: var(--radius-lg) !important;
+        padding: 20px !important;
+    }
+
+    /* Form container */
+    .stForm > div {
+        background-color: var(--bg-card) !important;
+        border-radius: var(--radius-md) !important;
+        padding: 16px !important;
+    }
+
+    /* Arreglar desalineación - gap consistente */
+    [data-testid="stHorizontalBlock"] {
+        gap: 16px !important;
+    }
+
+    /* Columnas equitativas */
+    [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] {
+        align-items: stretch !important;
+    }
+
+    /* Fix padding en secciones de tabs */
+    div[data-testid="stTabContent"] {
+        padding-top: 20px !important;
+    }
+
+    /* Contenedor de form submit */
+    .stFormSubmitButton {
+        margin-top: 16px !important;
+    }
+
+    /* Section headers */
+    .st-emotion-cache-1k h3,
+    .st-emotion-cache-1k h2 {
+        color: var(--primary) !important;
+        margin-bottom: 16px !important;
+    }
+
+    /* Asegurar que todos los contenedores internos usen fondo blanco */
+    div[class*="st-emotion-cache"] {
+        background-color: transparent !important;
+    }
+
+    /* Contenedor principal de secciones */
+    [data-testid="stMainBlockContainer"] {
+        background-color: var(--bg-main) !important;
+        padding: 20px !important;
+    }
+
+    /* Sidebar container */
+    [data-testid="stSidebar"] {
+        background-color: var(--bg-card) !important;
+    }
+
+    /* Fix alineación de elementos en columnas */
+    .stColumns > div {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    .stColumns > div > div {
+        flex: 1 !important;
+    }
+
+    /* ===== BOTONES - TODOS AMARILLOS, SIN CAMBIOS EN HOVER ===== */
+    /* Selectores de alta especificidad para override completo */
+
+    button,
+    .stButton > button,
+    button[data-testid="stBaseButton"],
+    button[data-testid="stBaseButton-secondary"],
+    button[class*="stBaseButton"],
+    .streamlit-expanderHeader button,
+    .streamlit-expanderContent button,
+    [data-testid="stForm"] button,
+    .stForm button {
+        background-color: #fef08a !important;
+        background: #fef08a !important;
+        background-image: none !important;
+        color: #1e293b !important;
+        border: 1px solid #facc15 !important;
+        font-family: 'Outfit', sans-serif !important;
+        font-weight: 600 !important;
+    }
+
+    /* Hover igual al estado default - sin cambio de color */
+    button:hover,
+    .stButton > button:hover,
+    button[data-testid="stBaseButton"]:hover,
+    button[data-testid="stBaseButton-secondary"]:hover,
+    button[class*="stBaseButton"]:hover,
+    .streamlit-expanderHeader button:hover,
+    .streamlit-expanderContent button:hover,
+    [data-testid="stForm"] button:hover,
+    .stForm button:hover {
+        background-color: #fef08a !important;
+        background: #fef08a !important;
+        background-image: none !important;
+        color: #1e293b !important;
+        border: 1px solid #facc15 !important;
+        transform: none !important;
+        box-shadow: 0 4px 6px -1px rgba(250, 204, 21, 0.3) !important;
+    }
+
+    /* Active igual al default */
+    button:active,
+    .stButton > button:active,
+    button[data-testid="stBaseButton"]:active,
+    button[data-testid="stBaseButton-secondary"]:active {
+        background-color: #fef08a !important;
+        background: #fef08a !important;
+        background-image: none !important;
+        color: #1e293b !important;
+        transform: none !important;
+    }
+
+    /* Focus state igual al default */
+    button:focus,
+    button:focus-visible,
+    button[data-testid="stBaseButton"]:focus,
+    button[data-testid="stBaseButton-secondary"]:focus {
+        background-color: #fef08a !important;
+        background: #fef08a !important;
+        background-image: none !important;
+        color: #1e293b !important;
+        border: 1px solid #facc15 !important;
+        box-shadow: 0 4px 6px -1px rgba(250, 204, 21, 0.3) !important;
+    }
+
+    /* ===== LABELS Y TEXTOS EN CHECKBOXES ===== */
     div[data-testid="stCheckbox"] label {
-        font-size: 22px !important;
-        font-weight: 800 !important;
-        color: #065f46 !important;
-        cursor: pointer !important;
+        color: var(--text-body) !important;
+        font-size: 16px !important;
+        font-weight: 500 !important;
     }
 
     div[data-testid="stCheckbox"] label span {
-        color: #065f46 !important;
-        font-weight: 800 !important;
+        color: var(--text-body) !important;
     }
-    
-    /* Cuando está checked */
+
+    /* ===== RADIO BUTTONS LEGIBLES ===== */
+    div[data-testid="stRadio"] label {
+        color: var(--text-body) !important;
+        font-weight: 500 !important;
+    }
+
+    div[data-testid="stRadio"] span {
+        color: var(--text-body) !important;
+    }
+
+    /* ===== FORMULARIOS LEGIBLES ===== */
+    .stTextInput label, .stTextArea label, .stSelectbox label, .stNumberInput label {
+        color: var(--primary) !important;
+        font-weight: 600 !important;
+    }
+
+    .stTextInput input, .stTextArea textarea {
+        color: var(--text-body) !important;
+        background: white !important;
+    }
+
+    /* ===== CHECKBOXES ESTILIZADOS ===== */
+    div[data-testid="stCheckbox"] {
+        background: var(--bg-card) !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: var(--radius-md) !important;
+        padding: 12px 16px !important;
+        margin: 8px 0 !important;
+        box-shadow: var(--shadow-sm) !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+
+    div[data-testid="stCheckbox"]:hover {
+        border-color: var(--accent) !important;
+        box-shadow: var(--shadow-md) !important;
+        transform: translateX(4px) !important;
+    }
+
+    div[data-testid="stCheckbox"] input[type="checkbox"] {
+        accent-color: var(--accent) !important;
+        width: 20px !important;
+        height: 20px !important;
+        cursor: pointer !important;
+    }
+
     div[data-testid="stCheckbox"]:has(input:checked) {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-        border-color: #047857 !important;
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4) !important;
+        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
+        border-color: var(--selection-border) !important;
+        box-shadow: 0 4px 12px rgba(250, 204, 21, 0.2) !important;
     }
-    
+
+    /* Checkbox checked - texto legible */
     div[data-testid="stCheckbox"]:has(input:checked) label {
-        color: white !important;
+        color: var(--selection-text) !important;
+        font-weight: 600 !important;
     }
-    
+
     div[data-testid="stCheckbox"]:has(input:checked) label span {
-        color: white !important;
-    }
-    
-    /* ===== BOTONES MEJORADOS ===== */
-
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%) !important;
-        color: white !important;
-        border: 4px solid #7c3aed !important;
-        font-weight: 800 !important;
-        font-size: 18px !important;
-        padding: 16px 32px !important;
-        border-radius: 12px !important;
-        box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5) !important;
-        transition: all 0.3s ease !important;
-        text-transform: uppercase !important;
-        letter-spacing: 1px !important;
+        color: var(--selection-text) !important;
     }
 
-    .stButton > button[kind="primary"]:hover {
-        transform: translateY(-4px) !important;
-        box-shadow: 0 8px 25px rgba(139, 92, 246, 0.6) !important;
-    }
-
-    .stButton > button[kind="secondary"] {
-        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
-        color: white !important;
-        border: 4px solid #b91c1c !important;
-        font-weight: 800 !important;
-        font-size: 18px !important;
-        padding: 16px 32px !important;
-        border-radius: 12px !important;
-        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4) !important;
-    }
-
-    .stButton > button[kind="secondary"]:hover {
-        transform: translateY(-3px) !important;
-        box-shadow: 0 6px 16px rgba(239, 68, 68, 0.5) !important;
-    }
-
-    .stButton > button {
-        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
-        color: white !important;
-        border: 4px solid #15803d !important;
-        font-weight: 700 !important;
-        font-size: 16px !important;
-        padding: 14px 28px !important;
-        border-radius: 10px !important;
-        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4) !important;
+    /* ===== BOTONES MEJORADOS - TODOS AMARILLOS ===== */
+    .stButton > button,
+    .stButton > button:focus,
+    .stButton > button:focus-visible,
+    .stButton > button:not([data-testid]):not([kind]) {
+        font-family: 'Outfit', sans-serif !important;
+        font-weight: 600 !important;
+        border-radius: var(--radius-md) !important;
+        padding: 10px 24px !important;
         transition: all 0.2s ease !important;
+        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
+        background-color: #fef08a !important;
+        color: var(--selection-text) !important;
+        border: 1px solid var(--selection-border) !important;
+        box-shadow: 0 4px 6px -1px rgba(250, 204, 21, 0.3) !important;
     }
 
     .stButton > button:hover {
-        transform: translateY(-3px) !important;
-        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4) !important;
-    }
-    
-    .stButton > button:disabled {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-        opacity: 1 !important;
-    }
-    
-    /* ===== NUMBER INPUT ===== */
-    .stNumberInput > div > div > input {
-        font-size: 20px !important;
-        font-weight: 700 !important;
-        border: 3px solid #8b5cf6 !important;
-        border-radius: 10px !important;
-        text-align: center !important;
-    }
-    
-    /* ===== PROGRESS BAR ===== */
-    .stProgress > div > div > div {
-        background: linear-gradient(90deg, #8b5cf6 0%, #6366f1 100%) !important;
-        height: 12px !important;
-    }
-    
-    /* ===== TEXT AREAS ===== */
-    .stTextArea textarea {
-        border: 2px solid #e5e7eb !important;
-        border-radius: 8px !important;
-        font-size: 15px !important;
-    }
-    
-    .stTextArea textarea:focus {
-        border-color: #8b5cf6 !important;
-        box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15) !important;
-    }
-    
-    /* ===== METRICS ===== */
-    [data-testid="stMetricValue"] {
-        font-size: 36px !important;
-        font-weight: 800 !important;
-        background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%) !important;
-        -webkit-background-clip: text !important;
-        -webkit-text-fill-color: transparent !important;
-    }
-    
-    /* ===== EXPANDERS ===== */
-    .streamlit-expanderHeader {
-        font-weight: 700 !important;
-        font-size: 16px !important;
-        background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%) !important;
-        border-radius: 8px !important;
-        border: 2px solid #d1d5db !important;
-    }
-    
-    /* ===== TOASTS (notificaciones) ===== */
-    .stToast {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-        color: white !important;
-        font-weight: 600 !important;
-        border-radius: 10px !important;
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4) !important;
-    }
-    
-    /* ===== SPINNER PERSONALIZADO ===== */
-    .stSpinner > div {
-        border-top-color: #8b5cf6 !important;
-        border-right-color: #6366f1 !important;
-        border-bottom-color: #8b5cf6 !important;
-        border-left-color: transparent !important;
-        border-width: 4px !important;
-    }
-    
-    /* Ocultar el texto del spinner por defecto */
-    .stSpinner > div > div {
-        color: #8b5cf6 !important;
-        font-weight: 600 !important;
+        background: linear-gradient(135deg, #facc15 0%, #fef08a 100%) !important;
+        background-color: #facc15 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 10px 15px -3px rgba(250, 204, 21, 0.4) !important;
     }
 
-    /* ===== RADIO BUTTONS / TABS MEJORADOS ===== */
+    .stButton > button:active {
+        background: #facc15 !important;
+        background-color: #facc15 !important;
+        transform: translateY(0) !important;
+    }
+
+    /* ===== NAVEGACIÓN (TABS) ===== */
     div[data-testid="stRadio"] > div {
-        background: #f1f5f9;
-        border-radius: 16px;
-        padding: 8px;
-        border: 3px solid #e2e8f0;
+        background: white !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: var(--radius-lg) !important;
+        padding: 6px !important;
+        box-shadow: var(--shadow-sm) !important;
     }
 
     div[data-testid="stRadio"] > div > label {
-        font-weight: 700;
-        font-size: 16px !important;
-        padding: 12px 22px;
-        border-radius: 10px;
-        transition: all 0.3s ease;
-        margin: 3px;
-        border: 2px solid transparent;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 500 !important;
+        font-size: 14px !important;
+        border-radius: calc(var(--radius-lg) - 4px) !important;
+        transition: all 0.2s ease !important;
+        color: var(--text-muted) !important;
     }
 
     div[data-testid="stRadio"] > div > label:has(input:checked) {
-        background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-        color: white;
-        box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
-        font-weight: 800;
-        border: 3px solid #7c3aed;
+        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
+        color: var(--selection-text) !important;
+        box-shadow: 0 4px 12px rgba(250, 204, 21, 0.2) !important;
+        font-weight: 600 !important;
+        border: 1px solid var(--selection-border) !important;
     }
 
-    div[data-testid="stRadio"] > div > label:hover:not(:has(input:checked)) {
-        background: #e2e8f0;
-        border: 2px solid #cbd5e1;
+    /* Hover state para pestañas - texto legible */
+    div[data-testid="stRadio"] > div > label:hover {
+        background: #fef9c3 !important;
+        color: var(--text-body) !important;
     }
 
-    /* ===== CHECKBOXES MEJORADOS ===== */
-    div[data-testid="stCheckbox"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(34, 197, 94, 0.35);
-    }
-
-    /* Badge de letra más grande y atractivo */
-    div[data-testid="stCheckbox"] span[data-testid="checkbox"] + div {
-        font-size: 16px !important;
-        font-weight: 700 !important;
-    }
-
-    /* ===== FORM SUBMIT BUTTONS MEJORADOS ===== */
-    .stFormSubmitButton > button {
-        font-size: 16px !important;
-        font-weight: 700 !important;
-        padding: 12px 24px !important;
-        border-radius: 10px !important;
-        transition: all 0.3s ease !important;
-    }
-
-    .stFormSubmitButton > button:hover {
-        transform: translateY(-2px) !important;
-    }
-
-    /* ===== SLIDER MEJORADO ===== */
-    div[data-testid="stSlider"] div[role="slider"] {
-        background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%) !important;
-        box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4) !important;
-    }
-
-    /* ===== METRICS MEJORADOS ===== */
+    /* ===== METRICS ===== */
     div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-        border-radius: 12px;
-        padding: 16px;
-        border: 2px solid #0ea5e9;
+        background: white !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: var(--radius-md) !important;
+        padding: 20px !important;
+        box-shadow: var(--shadow-sm) !important;
     }
 
     div[data-testid="stMetricValue"] {
-        color: #0284c7 !important;
+        color: var(--primary) !important;
+        font-family: 'Outfit', sans-serif !important;
         font-weight: 800 !important;
-        font-size: 28px !important;
     }
 
-    /* ===== DARK MODE - MODO OSCURO ===== */
-    /* Automatic dark mode detection disabled - using manual toggle only */
-    /* @media (prefers-color-scheme: dark) { */
-        /* Automatic dark mode disabled - controlled by toggle only */
-    /* } */
-
-    /* ===== MANUAL DARK MODE TOGGLE CSS ===== */
-    /* Esta clase se aplica cuando el usuario activa el modo oscuro manualmente */
-    .dark-mode-active {
-        /* Texto principal - BLANCO BOLD */
-        body, .stApp, div, p, span, label, h1, h2, h3, h4, h5, h6 {
-            color: #fafafa !important;
-        }
-
-        .stApp {
-            background: #0e1117 !important;
-        }
-
-        div[data-testid="stCheckbox"] {
-            background: linear-gradient(135deg, #1f2937 0%, #374151 100%) !important;
-            border: 4px solid #34d399 !important;
-        }
-
-        div[data-testid="stCheckbox"] label {
-            color: #ffffff !important;
-            font-weight: 800 !important;
-        }
-
-        div[data-testid="stCheckbox"]:has(input:checked) {
-            background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
-            border-color: #34d399 !important;
-        }
-
-        .stButton > button[kind="primary"] {
-            background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%) !important;
-            border-color: #c4b5fd !important;
-            color: #ffffff !important;
-        }
-
-        .stButton > button {
-            background: linear-gradient(135deg, #34d399 0%, #10b981 100%) !important;
-            border-color: #6ee7b7 !important;
-            color: #ffffff !important;
-        }
-
-        .stButton > button[kind="secondary"] {
-            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%) !important;
-            border-color: #fca5a5 !important;
-            color: #ffffff !important;
-        }
-
-        div[data-testid="stRadio"] > div {
-            background: #1f2937 !important;
-            border: 3px solid #374151 !important;
-        }
-
-        div[data-testid="stRadio"] > div > label {
-            color: #e5e7eb !important;
-        }
-
-        div[data-testid="stRadio"] > div > label:has(input:checked) {
-            background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%) !important;
-            border: 3px solid #c4b5fd !important;
-            color: #ffffff !important;
-        }
-
-        div[data-testid="stMetric"] {
-            background: linear-gradient(135deg, #1e3a5f 0%, #172554 100%) !important;
-            border: 2px solid #38bdf8 !important;
-        }
-
-        div[data-testid="stMetricValue"] {
-            color: #38bdf8 !important;
-        }
-
-        div[data-testid="stSlider"] div[role="slider"] {
-            background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%) !important;
-        }
-
-        .streamlit-expanderHeader {
-            background: #1f2937 !important;
-            color: #fafafa !important;
-        }
-
-        .stTextArea textarea, .stTextInput input {
-            background: #1f2937 !important;
-            color: #fafafa !important;
-            border-color: #4b5563 !important;
-        }
-
-        .stFormSubmitButton > button {
-            background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%) !important;
-            color: #ffffff !important;
-            border: 3px solid #c4b5fd !important;
-        }
-
-        .stProgress > div > div > div {
-            background: linear-gradient(90deg, #a78bfa 0%, #8b5cf6 100%) !important;
-        }
+    /* ===== PROGRESS BAR ===== */
+    .stProgress > div > div > div {
+        background: var(--accent) !important;
     }
+
+    /* ===== TOAST NOTIFICATIONS ===== */
+    .stToast {
+        background: var(--primary) !important;
+        color: white !important;
+    }
+
+    /* ===== FILE UPLOADER ===== */
+    .stFileUploader {
+        background: white !important;
+    }
+
+    /* ===== CODE BLOCKS ===== */
+    code {
+        color: var(--text-body) !important;
+    }
+
+    /* ===== INFO/WARNING/ERROR MESSAGES ===== */
+    .stInfo, .stWarning, .stError, .stSuccess {
+        color: var(--text-body) !important;
+    }
+    
+    /* ===== ALERTS LEGIBLES ===== */
+    div[data-testid="stAlert"] {
+        color: var(--text-body) !important;
+    }
+    
+    /* ===== SPINNER ===== */
+    .stSpinner {
+        color: var(--primary) !important;
+    }
+
+    /* ===== FILE UPLOADER DRAG & DROP BUTTONS ===== */
+    [data-testid="stFileUploadDropzone"] {
+        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
+        border: 2px dashed var(--selection-border) !important;
+        border-radius: var(--radius-lg) !important;
+    }
+
+    [data-testid="stFileUploadDropzone"]:hover {
+        border-color: #facc15 !important;
+        background: linear-gradient(135deg, #fef9c3 0%, #fef08a 100%) !important;
+    }
+
+    [data-testid="stFileUploadDropzone"] button {
+        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
+        color: var(--selection-text) !important;
+        border: 1px solid var(--selection-border) !important;
+        font-family: 'Outfit', sans-serif !important;
+        font-weight: 600 !important;
+        border-radius: var(--radius-md) !important;
+        box-shadow: 0 4px 6px -1px rgba(250, 204, 21, 0.3) !important;
+    }
+
+    [data-testid="stFileUploadDropzone"] button:hover {
+        background: linear-gradient(135deg, #facc15 0%, #fef08a 100%) !important;
+    }
+
+    /* Estilos para file uploader widget */
+    .stFileUploader > div {
+        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
+        background-color: #fef08a !important;
+        border-radius: var(--radius-lg) !important;
+        border: 2px dashed var(--selection-border) !important;
+    }
+
+    .stFileUploader [data-testid="stWidgetLabel"] {
+        color: var(--selection-text) !important;
+        font-weight: 600 !important;
+    }
+
+    .stFileUploader button {
+        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
+        background-color: #fef08a !important;
+        color: var(--selection-text) !important;
+        border: 1px solid var(--selection-border) !important;
+        font-family: 'Outfit', sans-serif !important;
+        font-weight: 600 !important;
+        border-radius: var(--radius-md) !important;
+    }
+
+    .stFileUploader button:hover {
+        background: linear-gradient(135deg, #facc15 0%, #fef08a 100%) !important;
+        background-color: #facc15 !important;
+    }
+
+    /* Archivo cargado */
+    [data-testid="stFileUploaderFile"] {
+        background: var(--bg-card) !important;
+        border: 1px solid var(--selection-border) !important;
+        border-radius: var(--radius-md) !important;
+    }
+
+    /* Dropzone area */
+    [data-testid="stFileUploadDropzone"] > div {
+        background: transparent !important;
+    }
+
+    /* Drag text */
+    [data-testid="stFileUploadDropzone"] p {
+        color: var(--selection-text) !important;
+        font-weight: 500 !important;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -785,473 +996,6 @@ def limpiar_formulario_manual():
     for letra in ["A", "B", "C", "D", "E", "F"]:
         st.session_state[f"manual_texto_{letra}"] = ""
         st.session_state[f"manual_corr_{letra}"] = False
-
-# --- DARK MODE TOGGLE ---
-# Initialize from session state or use toggle value
-if "dark_toggle" in st.session_state:
-    st.session_state.modo_oscuro = st.session_state.dark_toggle
-else:
-    if "modo_oscuro" not in st.session_state:
-        st.session_state.modo_oscuro = False
-
-# Apply dark mode CSS if enabled - inject directly into stApp
-if st.session_state.modo_oscuro:
-    st.markdown("""
-    <style>
-    /* Dark mode - applied directly to root */
-    html, body, .stApp {
-        background: #0e1117 !important;
-        color: #fafafa !important;
-    }
-
-    /* Override all text colors */
-    body, .stApp, div, p, span, label, h1, h2, h3, h4, h5, h6, li, td, th {
-        color: #fafafa !important;
-    }
-
-    /* Main app background */
-    .stApp {
-        background-color: #0e1117 !important;
-    }
-
-    /* Headers and titles */
-    h1, h2, h3, h4, h5, h6, .stHeader {
-        color: #fafafa !important;
-    }
-
-    /* Checkboxes */
-    div[data-testid="stCheckbox"] {
-        background: linear-gradient(135deg, #1f2937 0%, #374151 100%) !important;
-        border: 4px solid #34d399 !important;
-    }
-    div[data-testid="stCheckbox"] label {
-        color: #ffffff !important;
-        font-weight: 800 !important;
-        font-size: 22px !important;
-    }
-    div[data-testid="stCheckbox"]:has(input:checked) {
-        background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
-        border-color: #34d399 !important;
-    }
-
-    /* Buttons */
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%) !important;
-        border-color: #c4b5fd !important;
-        color: #ffffff !important;
-    }
-    .stButton > button {
-        background: linear-gradient(135deg, #34d399 0%, #10b981 100%) !important;
-        border-color: #6ee7b7 !important;
-        color: #ffffff !important;
-    }
-    .stButton > button[kind="secondary"] {
-        background: linear-gradient(135deg, #f87171 0%, #ef4444 100%) !important;
-        border-color: #fca5a5 !important;
-        color: #ffffff !important;
-    }
-
-    /* Radio buttons / Tabs */
-    div[data-testid="stRadio"] > div {
-        background: #1f2937 !important;
-        border: 3px solid #374151 !important;
-    }
-    div[data-testid="stRadio"] > div > label {
-        color: #e5e7eb !important;
-    }
-    div[data-testid="stRadio"] > div > label:has(input:checked) {
-        background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%) !important;
-        border: 3px solid #c4b5fd !important;
-        color: #ffffff !important;
-    }
-
-    /* Metrics */
-    div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, #1e3a5f 0%, #172554 100%) !important;
-        border: 2px solid #38bdf8 !important;
-    }
-    div[data-testid="stMetricValue"] {
-        color: #38bdf8 !important;
-    }
-
-    /* Slider */
-    div[data-testid="stSlider"] div[role="slider"] {
-        background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%) !important;
-    }
-
-    /* Expanders */
-    .streamlit-expanderHeader {
-        background: #1f2937 !important;
-        color: #fafafa !important;
-    }
-
-    /* Text inputs */
-    .stTextArea textarea, .stTextInput input {
-        background: #1f2937 !important;
-        color: #fafafa !important;
-        border-color: #4b5563 !important;
-    }
-
-    /* Form submit buttons */
-    .stFormSubmitButton > button {
-        background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%) !important;
-        color: #ffffff !important;
-        border: 3px solid #c4b5fd !important;
-    }
-
-    /* Progress bar */
-    .stProgress > div > div > div {
-        background: linear-gradient(90deg, #a78bfa 0%, #8b5cf6 100%) !important;
-    }
-
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background: #0f172a !important;
-    }
-
-    /* Toggle switch */
-    [data-testid="stToggle"] label {
-        color: #fafafa !important;
-    }
-
-    /* ===== CORRECCIONES FONDO BLANCO ===== */
-
-    /* Todos los contenedores principales */
-    section[data-testid="stMain"] {
-        background: #0e1117 !important;
-    }
-
-    /* Contenedores de elementos */
-    div[data-testid="stVerticalStackWrapper"],
-    div[data-testid="stHorizontalBlock"],
-    .stKey,
-    div[class*="stVertical"] {
-        background: transparent !important;
-    }
-
-    /* Opción de respuesta específica - fondo oscuro */
-    div[data-testid="stCheckbox"] {
-        background: #1f2937 !important;
-        border: 4px solid #34d399 !important;
-    }
-
-    /* Labels dentro de checkboxes */
-    div[data-testid="stCheckbox"] label,
-    div[data-testid="stCheckbox"] label span {
-        color: #ffffff !important;
-        background: transparent !important;
-    }
-
-    /* Texto de opciones */
-    div[data-testid="stCheckbox"] span,
-    div[data-testid="stCheckbox"] div {
-        color: #ffffff !important;
-    }
-
-    /* Checkbox marcado */
-    div[data-testid="stCheckbox"]:has(input:checked) {
-        background: #047857 !important;
-        border-color: #34d399 !important;
-    }
-
-    /* Contenedor del formulario de respuestas */
-    div[data-testid="stForm"] {
-        background: transparent !important;
-    }
-
-    /* Alerts y mensajes */
-    div[data-testid="stAlert"] {
-        background: #1f2937 !important;
-        color: #fafafa !important;
-    }
-
-    /* Success messages */
-    .stSuccess {
-        background: #065f46 !important;
-        color: #fafafa !important;
-    }
-
-    /* Info messages */
-    .stInfo {
-        background: #1e3a5f !important;
-        color: #fafafa !important;
-    }
-
-    /* Warning messages */
-    .stWarning {
-        background: #78350f !important;
-        color: #fafafa !important;
-    }
-
-    /* Error messages */
-    .stError {
-        background: #7f1d1d !important;
-        color: #fafafa !important;
-    }
-
-    /* Explicación de pregunta */
-    div[data-testid="stMarkdownContainer"] p {
-        color: #fafafa !important;
-    }
-
-    /* Slider track */
-    div[data-testid="stSlider"] .stSlider {
-        background: #374151 !important;
-    }
-
-    /* Radio options en general */
-    div[data-testid="stRadio"] span,
-    div[data-testid="stRadio"] div {
-        color: #fafafa !important;
-    }
-
-    /* Tooltips */
-    .stTooltipIcon {
-        color: #fafafa !important;
-    }
-
-    /* Progress bar container */
-    .stProgress .stProgressContent {
-        background: #374151 !important;
-    }
-
-    /* Metricas label */
-    div[data-testid="stMetricLabel"] {
-        color: #d1d5db !important;
-    }
-
-    /* Columnas */
-    div[data-testid="stColumn"] {
-        background: transparent !important;
-    }
-
-    /* ===== ELEMENTOS ESPECÍFICOS ===== */
-
-    /* File uploader - contenedor */
-    div[data-testid="stFileUploader"],
-    div[class*="stFileUploader"],
-    section[class*="stFileUploader"] {
-        background: #1f2937 !important;
-        border-radius: 12px !important;
-        padding: 16px !important;
-    }
-
-    /* File uploader - label */
-    div[data-testid="stFileUploader"] label,
-    div[data-testid="stFileUploader"] span,
-    section[class*="stFileUploader"] label {
-        color: #fafafa !important;
-    }
-
-    /* Botón de subir archivo - TODOS los botones en file uploader */
-    div[data-testid="stFileUploader"] button,
-    section[class*="stFileUploader"] button,
-    [data-testid="stFileUploaderDropzone"] button,
-    button[aria-label*="Choose file"],
-    button:has(span:contains("Choose file")),
-    .stFileUploader button {
-        background: #374151 !important;
-        color: #fafafa !important;
-        border: 2px solid #6b7280 !important;
-    }
-
-    /* Dropzone text */
-    div[data-testid="stFileUploader"] small,
-    div[data-testid="stFileUploader"] p,
-    section[class*="stFileUploader"] p,
-    section[class*="stFileUploader"] small {
-        color: #d1d5db !important;
-    }
-
-    /* Dropzone */
-    [data-testid="stFileUploaderDropzone"],
-    div[class*="Dropzone"] {
-        background: #1f2937 !important;
-        border: 2px dashed #4b5563 !important;
-        color: #d1d5db !important;
-    }
-
-    /* Expander - configuración API */
-    .streamlit-expanderHeader {
-        background: #1f2937 !important;
-        color: #fafafa !important;
-        border: 1px solid #374151 !important;
-    }
-
-    /* Expander content */
-    .streamlit-expanderContent {
-        background: #1f2937 !important;
-    }
-
-    /* Botones secundarios específicos */
-    button[kind="secondary"],
-    .stButton > button[kind="secondary"],
-    button:has(span:contains("Sube")) {
-        background: #374151 !important;
-        color: #fafafa !important;
-        border: 2px solid #6b7280 !important;
-    }
-
-    /* Input labels */
-    .stTextInput label,
-    .stTextArea label,
-    .stSelectbox label,
-    .stFileUploader label {
-        color: #fafafa !important;
-        font-weight: 600 !important;
-    }
-
-    /* Placeholder text */
-    input::placeholder,
-    textarea::placeholder {
-        color: #9ca3af !important;
-    }
-
-    /* Help buttons */
-    button[aria-label*="Help"] {
-        background: #374151 !important;
-        color: #fafafa !important;
-    }
-
-    /* Password visibility toggle - más específico */
-    button[aria-label*="password"],
-    button[aria-label*="Show"],
-    button[aria-label*="Hide"],
-    button[data-testid="visibilityToggle"],
-    [data-testid="stTextInputVisibilityToggle"],
-    svg[aria-label*="eye"] {
-        background: #4b5563 !important;
-        color: #fafafa !important;
-        fill: #fafafa !important;
-    }
-
-    /* TODOS los botones - con selectores más amplios */
-    button,
-    [role="button"],
-    input[type="button"],
-    input[type="submit"],
-    .btn,
-    [class*="Button"] {
-        background: #374151 !important;
-        color: #fafafa !important;
-        border: 2px solid #4b5563 !important;
-    }
-
-    /* Botones con primary - mantener violeta */
-    button[kind="primary"],
-    .stButton > button[kind="primary"],
-    button[class*="primary"],
-    [data-testid="baseButton-primary"],
-    button[class*="BaseButton-primary"] {
-        background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%) !important;
-        color: #ffffff !important;
-        border: 2px solid #c4b5fd !important;
-    }
-
-    /* Botón secondary - para file uploader */
-    button[kind="secondary"],
-    .stButton > button[kind="secondary"],
-    [data-testid="baseButton-secondary"],
-    button[class*="BaseButton-secondary"],
-    button[class*="secondary"] {
-        background: #4b5563 !important;
-        color: #fafafa !important;
-        border: 2px solid #6b7280 !important;
-    }
-
-    /* File uploader - todos los botones dentro */
-    div[class*="FileUploader"] button,
-    section[class*="stFileUploader"] button,
-    [data-testid="stFileUploader"] button,
-    .stFileUploader button,
-    div[data-testid="stFileUploader"] button,
-    [class*="Dropzone"] button {
-        background: #4b5563 !important;
-        color: #fafafa !important;
-        border: 2px solid #6b7280 !important;
-    }
-
-    /* Input icon buttons (password visibility, etc) - MEJORADO */
-    [class*="InputIcon"],
-    [class*="VisibilityToggle"],
-    svg[aria-label*="eye"],
-    [class*="StyledIconButton"] {
-        background: transparent !important;
-        color: #fafafa !important;
-    }
-
-    /* BOTÓN DE VISIBILIDAD CONTRASEÑA - CRÍTICO */
-    /* Targeting Streamlit's internal password toggle */
-    button[aria-label="Toggle password visibility"],
-    button[aria-label="Show password text"],
-    button[aria-label="Hide password text"],
-    button[data-testid="stTextInputVisibilityToggle"],
-    [data-testid="stTextInput"] button,
-    div[data-testid="stTextInput"] button,
-    .stTextInput button,
-    /* SVG icons in password field */
-    [data-testid="stTextInput"] svg,
-    div[class*="InputContainer"] svg,
-    /* BaseWeb button inside input */
-    [data-baseweb="input"] button,
-    div[class*="InputContainer"] button {
-        background: #4b5563 !important;
-        color: #fafafa !important;
-        fill: #fafafa !important;
-        border: 1px solid #6b7280 !important;
-    }
-
-    /* Hover state for password toggle - mantener consistencia */
-    button[aria-label="Toggle password visibility"]:hover,
-    button[aria-label="Show password text"]:hover,
-    button[aria-label="Hide password text"]:hover {
-        background: #6b7280 !important;
-        color: #fafafa !important;
-    }
-
-    /* Spinner */
-    .stSpinner {
-        color: #a78bfa !important;
-    }
-
-    /* Code blocks */
-    code {
-        background: #1f2937 !important;
-        color: #fafafa !important;
-    }
-
-    /* Links */
-    a, .stLink {
-        color: #a78bfa !important;
-    }
-
-    /* Divider */
-    hr {
-        border-color: #374151 !important;
-    }
-
-    /* Selectbox dropdown */
-    .stSelectbox div[data-baseweb="select"] {
-        background: #1f2937 !important;
-        border-color: #374151 !important;
-    }
-
-    /* Tooltips */
-    div[role="tooltip"] {
-        background: #1f2937 !important;
-        color: #fafafa !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# Toggle button row
-col_toggle, col_title = st.columns([1, 6])
-with col_toggle:
-    modo_oscuro = st.toggle("🌙 Dark", key="dark_toggle")
-    # Update session state and rerun if changed
-    if "dark_toggle" in st.session_state and st.session_state.modo_oscuro != modo_oscuro:
-        st.session_state.modo_oscuro = modo_oscuro
-        st.rerun()
 
 # --- PESTAÑAS PRINCIPALES CON ESTADO ---
 opciones_pestanas = ["✍️ Ingesta Manual", "📸 Extracción OCR", "📊 Ver Preguntas", "🎮 Simulador"]
@@ -1691,7 +1435,7 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
         
         with col_aleatorio:
             st.write("")
-            mostrar_aleatorio = st.checkbox("🎲 Aleatorizar", value=False)
+            mostrar_aleatorio = st.checkbox("🎲 Aleatorizar", key="mostrar_aleatorio")
         
         with st.expander("📥 Importar / 📤 Exportar preguntas"):
             col_exp, col_imp = st.columns(2)
@@ -1900,7 +1644,7 @@ elif pestana_seleccionada == "🎮 Simulador":
                 )
                 st.caption(f"⏰ Tendrás {tiempo_minutos} minutos para {num_preguntas} preguntas")
             
-            modo_aleatorio = st.checkbox("🎲 Orden aleatorio", value=True)
+            modo_aleatorio = st.checkbox("🎲 Orden aleatorio", key="modo_aleatorio")
             
             st.markdown("---")
             
@@ -2041,24 +1785,34 @@ elif pestana_seleccionada == "🎮 Simulador":
                             letra = opcion[0]
                             texto = opcion[3:].strip() if len(opcion) > 3 else opcion
                             
+                            bg_correcta = "#d1fae5"
+                            color_correcta = "#065f46"
+                            border_correcta = "#10b981"
+                            bg_incorrecta = "#fee2e2"
+                            color_incorrecta = "#991b1b"
+                            border_incorrecta = "#ef4444"
+                            bg_default = "#f9fafb"
+                            color_default = "#4b5563"
+                            border_default = "#d1d5db"
+                            
                             if letra in preg["correctas"]:
                                 st.markdown(f"""
-                                <div style='background: #d1fae5; border-left: 4px solid #10b981; padding: 12px; margin-bottom: 8px; border-radius: 6px;'>
-                                    <strong style='color: #065f46;'>{letra}) {texto}</strong>
-                                    <span style='color: #059669; font-weight: 600;'> ← ✅ CORRECTA</span>
+                                <div style='background: {bg_correcta}; border-left: 4px solid {border_correcta}; padding: 12px; margin-bottom: 8px; border-radius: 6px;'>
+                                    <strong style='color: {color_correcta};'>{letra}) {texto}</strong>
+                                    <span style='color: {color_correcta}; font-weight: 600;'> ← ✅ CORRECTA</span>
                                 </div>
                                 """, unsafe_allow_html=True)
                             elif letra in resp_usuario:
                                 st.markdown(f"""
-                                <div style='background: #fee2e2; border-left: 4px solid #ef4444; padding: 12px; margin-bottom: 8px; border-radius: 6px;'>
-                                    <span style='color: #991b1b;'>{letra}) {texto}</span>
-                                    <span style='color: #dc2626; font-weight: 600;'> ← ❌ Tu respuesta</span>
+                                <div style='background: {bg_incorrecta}; border-left: 4px solid {border_incorrecta}; padding: 12px; margin-bottom: 8px; border-radius: 6px;'>
+                                    <span style='color: {color_incorrecta};'>{letra}) {texto}</span>
+                                    <span style='color: {color_incorrecta}; font-weight: 600;'> ← ❌ Tu respuesta</span>
                                 </div>
                                 """, unsafe_allow_html=True)
                             else:
                                 st.markdown(f"""
-                                <div style='background: #f9fafb; border-left: 4px solid #d1d5db; padding: 12px; margin-bottom: 8px; border-radius: 6px;'>
-                                    <span style='color: #4b5563;'>{letra}) {texto}</span>
+                                <div style='background: {bg_default}; border-left: 4px solid {border_default}; padding: 12px; margin-bottom: 8px; border-radius: 6px;'>
+                                    <span style='color: {color_default};'>{letra}) {texto}</span>
                                 </div>
                                 """, unsafe_allow_html=True)
                     
@@ -2291,123 +2045,98 @@ elif pestana_seleccionada == "🎮 Simulador":
                 </div>
                 """, unsafe_allow_html=True)
             
-            # Obtener respuestas previas
-            respuestas_previas = st.session_state.respuestas_usuario.get(idx, [])
-            if not isinstance(respuestas_previas, list):
-                respuestas_previas = [respuestas_previas] if respuestas_previas else []
-            
-            # Formulario para las opciones
-            with st.form(key=f"form_pregunta_{idx}", clear_on_submit=False):
-                
-                opciones_seleccionadas = {}
-                
-                for i, opcion in enumerate(preg["opciones"]):
-                    letra = opcion[0]
-                    texto = opcion[3:].strip() if len(opcion) > 3 else opcion
-                    
-                    # Card visual
-                    if letra in respuestas_previas:
-                        st.markdown(f"""
-                        <div style='
-                            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-                            border: 3px solid #047857;
-                            border-radius: 12px;
-                            padding: 16px;
-                            margin-bottom: 12px;
-                            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-                        '>
-                            <div style='display: flex; align-items: center; gap: 12px;'>
-                                <div style='
-                                    width: 48px;
-                                    height: 48px;
-                                    border-radius: 50%;
-                                    background: white;
-                                    color: #10b981;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    font-weight: bold;
-                                    font-size: 24px;
-                                '>
-                                    ✓
-                                </div>
-                                <div style='flex: 1; color: white;'>
-                                    <div style='font-size: 14px; font-weight: 800; text-transform: uppercase;'>
-                                        OPCIÓN {letra} SELECCIONADA
-                                    </div>
+            # Mostrar opciones con checkboxes - Streamlit maneja el estado automáticamente
+            st.markdown("### Selecciona tu respuesta:")
+
+            opciones_seleccionadas = {}
+
+            for i, opcion in enumerate(preg["opciones"]):
+                letra = opcion[0]
+                texto = opcion[3:].strip() if len(opcion) > 3 else opcion
+
+                # El checkbox mantiene su estado automáticamente vía session_state
+                opciones_seleccionadas[letra] = st.checkbox(
+                    f"✅ Opción {letra}",
+                    key=f"opt_{idx}_{letra}"
+                )
+
+                # Mostrar card visual basada en el estado ACTUAL del checkbox
+                if opciones_seleccionadas[letra]:
+                    st.markdown(f"""
+                    <div style='
+                        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                        border: 3px solid #047857;
+                        border-radius: 12px;
+                        padding: 16px;
+                        margin-bottom: 12px;
+                        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+                    '>
+                        <div style='display: flex; align-items: center; gap: 12px;'>
+                            <div style='
+                                width: 48px;
+                                height: 48px;
+                                border-radius: 50%;
+                                background: white;
+                                color: #10b981;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                font-weight: bold;
+                                font-size: 24px;
+                            '>
+                                ✓
+                            </div>
+                            <div style='flex: 1; color: white;'>
+                                <div style='font-size: 14px; font-weight: 800; text-transform: uppercase;'>
+                                    OPCIÓN {letra} SELECCIONADA
                                 </div>
                             </div>
                         </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                        <div style='
-                            background: white;
-                            border: 2px solid #e5e7eb;
-                            border-radius: 12px;
-                            padding: 16px;
-                            margin-bottom: 12px;
-                        '>
-                            <div style='display: flex; align-items: center; gap: 12px;'>
-                                <div style='
-                                    width: 48px;
-                                    height: 48px;
-                                    border-radius: 50%;
-                                    background: #9ca3af;
-                                    color: white;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    font-weight: bold;
-                                    font-size: 22px;
-                                '>
-                                    {letra}
-                                </div>
-                                <div style='flex: 1;'>
-                                    <div style='font-size: 12px; color: #6b7280; text-transform: uppercase; font-weight: 600;'>
-                                        Opción {letra}
-                                    </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style='
+                        background: white;
+                        border: 2px solid #e5e7eb;
+                        border-radius: 12px;
+                        padding: 16px;
+                        margin-bottom: 12px;
+                    '>
+                        <div style='display: flex; align-items: center; gap: 12px;'>
+                            <div style='
+                                width: 48px;
+                                height: 48px;
+                                border-radius: 50%;
+                                background: #9ca3af;
+                                color: white;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                font-weight: bold;
+                                font-size: 22px;
+                            '>
+                                {letra}
+                            </div>
+                            <div style='flex: 1;'>
+                                <div style='font-size: 12px; color: #6b7280; text-transform: uppercase; font-weight: 600;'>
+                                    Opción {letra}
                                 </div>
                             </div>
                         </div>
-                        """, unsafe_allow_html=True)
-                    
-                    col_txt, col_check = st.columns([4, 1])
-                    
-                    with col_txt:
-                        if '\n' in texto or len(texto) > 70:
-                            st.text(texto)
-                        else:
-                            st.markdown(texto)
-                    
-                    with col_check:
-                        opciones_seleccionadas[letra] = st.checkbox(
-                            f"✅ {letra}",
-                            value=(letra in respuestas_previas),
-                            key=f"opt_{idx}_{letra}"
-                        )
-                
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # Mostrar texto de la opción
+                if '\n' in texto or len(texto) > 70:
+                    st.text(texto)
+                else:
+                    st.markdown(texto)
+
                 st.markdown("---")
-                
-                # Botones de navegación
-                col1, col2, col3 = st.columns([1, 1, 1])
-                
-                with col1:
-                    btn_anterior = st.form_submit_button("⬅ Anterior", type="secondary", use_container_width=True) if idx > 0 else None
 
-                with col2:
-                    respondidas = len(st.session_state.respuestas_usuario)
-                    st.metric("📊", f"{respondidas}/{total}")
-
-                with col3:
-                    if idx < total - 1:
-                        btn_siguiente = st.form_submit_button("Siguiente ➡", type="primary", use_container_width=True)
-                    else:
-                        btn_finalizar = st.form_submit_button("🏁 Finalizar", type="primary", use_container_width=True)
-            
-            # Procesar formulario
+            # Guardar estado en session_state (sin rerun - se actualiza solo)
             respuestas_actuales = [letra for letra, seleccionada in opciones_seleccionadas.items() if seleccionada]
-            
             if respuestas_actuales:
                 st.session_state.respuestas_usuario[idx] = respuestas_actuales
                 if es_multiple:
@@ -2417,56 +2146,67 @@ elif pestana_seleccionada == "🎮 Simulador":
             else:
                 if idx in st.session_state.respuestas_usuario:
                     del st.session_state.respuestas_usuario[idx]
-                st.info("💡 Marca al menos una opción antes de continuar")
             
-            # Navegación
-            if idx > 0 and btn_anterior:
-                st.session_state.indice_actual -= 1
-                st.rerun()
+            st.markdown("---")
             
-            if idx < total - 1 and 'btn_siguiente' in locals() and btn_siguiente:
-                st.session_state.indice_actual += 1
-                st.rerun()
+            # Botones de navegación (estos SÍ pueden estar en un form o como botones normales)
+            col1, col2, col3 = st.columns([1, 1, 1])
             
-            if idx == total - 1 and 'btn_finalizar' in locals() and btn_finalizar:
-                with st.spinner("📊 Calculando tus resultados finales..."):
-                    correctas = 0
-                    parciales = 0
-                    incorrectas = 0
-                    no_respondidas = 0
-                    
-                    for i, p in enumerate(st.session_state.preguntas_simulador):
-                        resp = st.session_state.respuestas_usuario.get(i, [])
-                        if not isinstance(resp, list):
-                            resp = [resp] if resp else []
-                        
-                        # Verificar si fue respondida
-                        if not resp:
-                            no_respondidas += 1
-                            continue
-                        
-                        correctas_p = set(p["correctas"])
-                        respuestas_s = set(resp)
-                        
-                        if respuestas_s == correctas_p:
-                            correctas += 1
-                        elif respuestas_s.intersection(correctas_p):
-                            parciales += 1
-                        else:
-                            incorrectas += 1
-                    
-                    # Las no respondidas se cuentan como incorrectas
-                    if no_respondidas > 0 and st.session_state.get("timer_activo", False):
-                        incorrectas += no_respondidas
-                        no_respondidas = 0
-                    
-                    st.session_state.resultado_final = {
-                        "correctas": correctas,
-                        "parciales": parciales,
-                        "incorrectas": incorrectas,
-                        "no_respondidas": no_respondidas,
-                        "total": total,
-                        "porcentaje": (correctas / total) * 100
-                    }
-                    st.session_state.mostrar_resultados = True
-                st.rerun()
+            with col1:
+                if idx > 0:
+                    if st.button("⬅ Anterior", use_container_width=True):
+                        st.session_state.indice_actual -= 1
+                        st.rerun()
+
+            with col2:
+                respondidas = len(st.session_state.respuestas_usuario)
+                st.metric("📊", f"{respondidas}/{total}")
+
+            with col3:
+                if idx < total - 1:
+                    if st.button("Siguiente ➡", type="primary", use_container_width=True):
+                        st.session_state.indice_actual += 1
+                        st.rerun()
+                else:
+                    if st.button("🏁 Finalizar", type="primary", use_container_width=True):
+                        with st.spinner("📊 Calculando tus resultados finales..."):
+                            correctas = 0
+                            parciales = 0
+                            incorrectas = 0
+                            no_respondidas = 0
+                            
+                            for i, p in enumerate(st.session_state.preguntas_simulador):
+                                resp = st.session_state.respuestas_usuario.get(i, [])
+                                if not isinstance(resp, list):
+                                    resp = [resp] if resp else []
+                                
+                                # Verificar si fue respondida
+                                if not resp:
+                                    no_respondidas += 1
+                                    continue
+                                
+                                correctas_p = set(p["correctas"])
+                                respuestas_s = set(resp)
+                                
+                                if respuestas_s == correctas_p:
+                                    correctas += 1
+                                elif respuestas_s.intersection(correctas_p):
+                                    parciales += 1
+                                else:
+                                    incorrectas += 1
+                            
+                            # Las no respondidas se cuentan como incorrectas
+                            if no_respondidas > 0 and st.session_state.get("timer_activo", False):
+                                incorrectas += no_respondidas
+                                no_respondidas = 0
+                            
+                            st.session_state.resultado_final = {
+                                "correctas": correctas,
+                                "parciales": parciales,
+                                "incorrectas": incorrectas,
+                                "no_respondidas": no_respondidas,
+                                "total": total,
+                                "porcentaje": (correctas / total) * 100
+                            }
+                            st.session_state.mostrar_resultados = True
+                        st.rerun()
