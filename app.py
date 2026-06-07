@@ -238,6 +238,36 @@ st.markdown("""
         border: 1px solid var(--border-color) !important;
     }
 
+    /* Input de tag dentro del expander - ensure readable */
+    .streamlit-expanderContent [data-testid="stTextInput"] input {
+        background: white !important;
+        color: var(--text-body) !important;
+        border: 1px solid var(--border-color) !important;
+    }
+
+    .streamlit-expanderContent [data-testid="stTextInput"] label {
+        color: var(--selection-text) !important;
+    }
+
+    /* Tag badge dentro de expanders - contraste garantizado */
+    .streamlit-expanderContent div[style*="background: linear-gradient(135deg, #dbeafe"] {
+        background: #dbeafe !important;
+        border: 1px solid #3b82f6 !important;
+    }
+
+    .streamlit-expanderContent div[style*="background: linear-gradient(135deg, #dbeafe"] span {
+        color: #1e40af !important;
+    }
+
+    /* Forzar colores en markdown containers dentro de expander */
+    .streamlit-expanderContent [data-testid="stMarkdownContainer"] p code {
+        background: #dbeafe !important;
+        color: #1e40af !important;
+        padding: 2px 8px !important;
+        border-radius: 4px !important;
+        border: 1px solid #3b82f6 !important;
+    }
+
     /* Labels dentro del expander */
     .streamlit-expanderContent label {
         color: var(--selection-text) !important;
@@ -564,6 +594,30 @@ st.markdown("""
         color: var(--primary) !important;
     }
 
+    /* ===== TOOLTIP / HELP POPOVER - AGRESIVO ===== */
+    div[data-testid="stTooltip"],
+    div[data-testid="stTooltipContent"],
+    div[data-testid="stTooltipIcon"],
+    div[data-testid="stPopover"],
+    div[data-testid="stPopoverContent"],
+    div[data-testid="help"],
+    [role="tooltip"],
+    [role="dialog"],
+    .stTooltip,
+    .stPopover {
+        background: white !important;
+        color: var(--text-body) !important;
+        border-color: var(--border-color) !important;
+    }
+
+    div[data-testid="stTooltip"] *,
+    div[data-testid="stTooltipContent"] *,
+    div[data-testid="stPopover"] *,
+    div[data-testid="stPopoverContent"] *,
+    [role="tooltip"] * {
+        color: var(--text-body) !important;
+    }
+
     /* ===== FILE UPLOADER DRAG & DROP BUTTONS ===== */
     [data-testid="stFileUploadDropzone"] {
         background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
@@ -753,8 +807,8 @@ if "config_completed" not in st.session_state:
     st.session_state.api_key_ocr = saved_key or ""
 
 if not st.session_state.config_completed:
-    st.title("🎓 Simulador de Certificación")
-    st.markdown("### Bienvenido al Simulador de Exámenes de Certificación F5 BIG-IP")
+    st.title("🎓 Why need a VCE app?")
+    st.markdown("### Bienvenido al Simulador de Exámenes de Certificación")
     
     st.markdown("---")
     st.markdown("#### Configuración Inicial")
@@ -801,7 +855,7 @@ if not st.session_state.config_completed:
     
     st.stop()
 
-st.title("📚 Centro de Gestión de Preguntas de Certificación")
+st.title("📚 Why need a VCE app?")
 
 # --- FUNCIONES DE CARGA/GUARDADO ---
 @st.cache_data(ttl=10)
@@ -993,6 +1047,7 @@ Has excedido los límites gratuitos de Google Gemini.
 def limpiar_formulario_manual():
     st.session_state.manual_enunciado = ""
     st.session_state.manual_imagen = None
+    st.session_state.manual_tag = ""
     for letra in ["A", "B", "C", "D", "E", "F"]:
         st.session_state[f"manual_texto_{letra}"] = ""
         st.session_state[f"manual_corr_{letra}"] = False
@@ -1032,6 +1087,8 @@ if pestana_seleccionada == opciones_pestanas[0]:
         st.session_state.manual_enunciado = ""
     if "manual_imagen" not in st.session_state:
         st.session_state.manual_imagen = None
+    if "manual_tag" not in st.session_state:
+        st.session_state.manual_tag = ""
     
     with st.form("form_manual", clear_on_submit=False):
         enunciado = st.text_area(
@@ -1046,6 +1103,14 @@ if pestana_seleccionada == opciones_pestanas[0]:
             "🖼️ Imagen adjunta (opcional)", 
             type=["png", "jpg", "jpeg"],
             key="img_upload_manual"
+        )
+        
+        tag_manual = st.text_input(
+            "🏷️ Tag / Categoría",
+            value=st.session_state.manual_tag,
+            placeholder="Ej: Palo Alto, Forcepoint, Fortinet...",
+            key="form_tag",
+            help="Etiqueta para agrupar preguntas (ej: vendor, tecnología)"
         )
         
         st.markdown("### Opciones de Respuesta")
@@ -1092,6 +1157,7 @@ if pestana_seleccionada == opciones_pestanas[0]:
         
         if submitted:
             st.session_state.manual_enunciado = enunciado
+            st.session_state.manual_tag = tag_manual
             for letra in letras:
                 st.session_state[f"manual_texto_{letra}"] = opciones_inputs[letra]
                 st.session_state[f"manual_corr_{letra}"] = correctas_checks[letra]
@@ -1131,6 +1197,7 @@ if pestana_seleccionada == opciones_pestanas[0]:
                             "id": nuevo_id,
                             "pregunta": enunciado.strip(),
                             "imagen": ruta_imagen,
+                            "tag": tag_manual.strip(),
                             "opciones": opciones_capturadas,
                             "correctas": correctas_capturadas
                         }
@@ -1310,6 +1377,13 @@ elif pestana_seleccionada == "📸 Extracción OCR":
                         value=True
                     )
                     
+                    tag_ocr = st.text_input(
+                        "🏷️ Tag / Categoría",
+                        placeholder="Ej: Palo Alto, Forcepoint, Fortinet...",
+                        key="ocr_tag",
+                        help="Etiqueta para agrupar preguntas (ej: vendor, tecnología)"
+                    )
+                    
                     col_save, col_cancel = st.columns([3, 1])
                     
                     with col_save:
@@ -1337,6 +1411,7 @@ elif pestana_seleccionada == "📸 Extracción OCR":
                                         "id": nuevo_id,
                                         "pregunta": pregunta_editada.strip(),
                                         "imagen": ruta_imagen,
+                                        "tag": tag_ocr.strip() if tag_ocr else "",
                                         "opciones": opciones_guardadas,
                                         "correctas": correctas_marcadas
                                     }
@@ -1426,6 +1501,18 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
     else:
         st.success(f"✅ {len(preguntas)} pregunta(s) guardada(s)")
         
+        tags_unicos = sorted(set(p.get("tag", "") for p in preguntas if p.get("tag", "")))
+        tiene_sin_tag = any(not p.get("tag", "") for p in preguntas)
+        if tiene_sin_tag:
+            tags_unicos = ["Sin tag"] + tags_unicos
+        if tags_unicos:
+            tag_counts = {}
+            for p in preguntas:
+                t = p.get("tag", "") or "Sin tag"
+                tag_counts[t] = tag_counts.get(t, 0) + 1
+            stats_str = " | ".join(f"{t} ({c})" for t, c in sorted(tag_counts.items()))
+            st.markdown(f"🏷️ **Tags:** {stats_str}")
+        
         st.markdown("### 🔧 Herramientas")
         
         col_buscar, col_aleatorio = st.columns([3, 1])
@@ -1436,6 +1523,16 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
         with col_aleatorio:
             st.write("")
             mostrar_aleatorio = st.checkbox("🎲 Aleatorizar", key="mostrar_aleatorio")
+        
+        if tags_unicos:
+            tags_filtrar = st.multiselect(
+                "🏷️ Filtrar por tag",
+                options=tags_unicos,
+                key="filtro_tag_ver",
+                help="Selecciona uno o más tags para filtrar las preguntas mostradas"
+            )
+        else:
+            tags_filtrar = []
         
         with st.expander("📥 Importar / 📤 Exportar preguntas"):
             col_exp, col_imp = st.columns(2)
@@ -1543,13 +1640,48 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
 
         preguntas_filtradas = preguntas
         if buscar.strip():
-            preguntas_filtradas = [p for p in preguntas if buscar.lower() in p['pregunta'].lower()]
+            preguntas_filtradas = [p for p in preguntas_filtradas if buscar.lower() in p['pregunta'].lower()]
+        if tags_filtrar:
+            def matches_tag(p, tags):
+                t = p.get("tag", "")
+                for tag_sel in tags:
+                    if tag_sel == "Sin tag" and not t:
+                        return True
+                    elif tag_sel == t:
+                        return True
+                return False
+            preguntas_filtradas = [p for p in preguntas_filtradas if matches_tag(p, tags_filtrar)]
+        if buscar.strip() or tags_filtrar:
             st.caption(f"🔍 {len(preguntas_filtradas)} resultado(s)")
         
         for q in preguntas_filtradas:
             p_mostrar = aleatorizar_pregunta(q) if mostrar_aleatorio else q
             
             with st.expander(f"❓ #{q['id']}: {q['pregunta'][:70]}..."):
+                tag_actual = q.get("tag", "")
+                if tag_actual:
+                    st.info(f"🏷️ **Tag:** {tag_actual}")
+                else:
+                    st.caption("🏷️ Sin tag asignado")
+                
+                col_tag_input, col_tag_btn = st.columns([3, 1])
+                with col_tag_input:
+                    nuevo_tag = st.text_input(
+                        "Tag",
+                        value=tag_actual,
+                        key=f"tag_edit_{q['id']}",
+                        placeholder="Asignar tag...",
+                        label_visibility="collapsed"
+                    )
+                with col_tag_btn:
+                    if st.button("💾", key=f"save_tag_{q['id']}", help="Guardar tag"):
+                        q["tag"] = nuevo_tag.strip()
+                        save_questions(preguntas)
+                        st.toast(f"✅ Tag actualizado: '{nuevo_tag.strip() or 'sin tag'}'", icon="🏷️")
+                        st.rerun()
+                
+                st.markdown("---")
+                
                 st.markdown(f"**{p_mostrar['pregunta']}**")
                 
                 imagen_path = resolve_image_path(p_mostrar.get("imagen"))
@@ -1606,20 +1738,87 @@ elif pestana_seleccionada == "🎮 Simulador":
             
             st.markdown("### ⚙️ Configurar Examen")
             
+            tags_simulador = sorted(set(p.get("tag", "") for p in preguntas if p.get("tag", "")))
+            if tags_simulador:
+                tags_seleccionados = st.multiselect(
+                    "🏷️ Seleccionar tags a incluir",
+                    options=tags_simulador,
+                    default=tags_simulador,
+                    key="tags_simulador",
+                    help="Selecciona qué tags incluir en el examen. Si no seleccionas ninguno, se incluyen todas las preguntas."
+                )
+                if tags_seleccionados:
+                    preguntas_con_tag = [p for p in preguntas if p.get("tag", "") in tags_seleccionados]
+                else:
+                    preguntas_con_tag = preguntas
+            else:
+                preguntas_con_tag = preguntas
+                tags_seleccionados = []
+            
+            total_con_tag = len(preguntas_con_tag)
+            
+            st.markdown("---")
+            
+            usar_rango = st.checkbox(
+                "📏 Seleccionar por rango ordinal",
+                value=False,
+                key="usar_rango",
+                help="Activa para elegir un rango específico de preguntas (ej: preguntas 1 a 11)"
+            )
+            
+            if usar_rango:
+                max_rango = max(total_con_tag, 1)
+                
+                if "rango_inicio" in st.session_state:
+                    st.session_state.rango_inicio = min(st.session_state.rango_inicio, max_rango)
+                if "rango_fin" in st.session_state:
+                    st.session_state.rango_fin = min(st.session_state.rango_fin, max_rango)
+                
+                col_r1, col_r2 = st.columns(2)
+                with col_r1:
+                    rango_inicio = st.number_input(
+                        "Desde (pregunta #)",
+                        min_value=1,
+                        max_value=max_rango,
+                        step=1,
+                        key="rango_inicio",
+                        help="Número de pregunta de inicio (orden según 'Ver Preguntas')"
+                    )
+                with col_r2:
+                    rango_fin = st.number_input(
+                        "Hasta (pregunta #)",
+                        min_value=1,
+                        max_value=max_rango,
+                        step=1,
+                        key="rango_fin",
+                        help="Número de pregunta de fin (orden según 'Ver Preguntas')"
+                    )
+                
+                if rango_inicio > rango_fin:
+                    st.warning("⚠️ El rango inicio no puede ser mayor que el fin. Se ajustará automáticamente.")
+                    rango_fin = max(rango_inicio, rango_fin)
+                
+                preguntas_disponibles = preguntas_con_tag[rango_inicio - 1:rango_fin]
+                st.caption(f"📋 Rango aplicado: preguntas **{rango_inicio}** a **{rango_fin}** → **{len(preguntas_disponibles)}** preguntas seleccionadas")
+            else:
+                preguntas_disponibles = preguntas_con_tag
+                st.caption(f"📋 Pool completo: **{len(preguntas_disponibles)}** preguntas")
+            
+            st.markdown("---")
+            
             col1, col2 = st.columns([2, 1])
             
             with col1:
-                # ✅ SLIDER EN LUGAR DE NUMBER_INPUT (sin parpadeos)
                 num_preguntas = st.slider(
                     "🎯 Número de preguntas del examen",
                     min_value=1,
-                    max_value=len(preguntas),
-                    value=min(10, len(preguntas)),
+                    max_value=len(preguntas_disponibles),
+                    value=min(10, len(preguntas_disponibles)),
                     step=1,
                     help="Desliza para seleccionar cuántas preguntas quieres"
                 )
                 
-                st.caption(f"📊 Seleccionadas: **{num_preguntas}** de {len(preguntas)} preguntas disponibles")
+                st.caption(f"📊 Seleccionadas: **{num_preguntas}** de {len(preguntas_disponibles)} preguntas disponibles")
             
             with col2:
                 modo_examen = st.radio(
@@ -1644,13 +1843,13 @@ elif pestana_seleccionada == "🎮 Simulador":
                 )
                 st.caption(f"⏰ Tendrás {tiempo_minutos} minutos para {num_preguntas} preguntas")
             
-            modo_aleatorio = st.checkbox("🎲 Orden aleatorio", key="modo_aleatorio")
+            modo_aleatorio = st.checkbox("🎲 Orden aleatorio", value=True, key="modo_aleatorio")
             
             st.markdown("---")
             
             if st.button("🚀 Iniciar Examen", type="primary", use_container_width=True):
                 with st.spinner("🎮 Preparando tu examen personalizado..."):
-                    preguntas_sel = random.sample(preguntas, num_preguntas) if modo_aleatorio else preguntas[:num_preguntas]
+                    preguntas_sel = random.sample(preguntas_disponibles, num_preguntas) if modo_aleatorio else preguntas_disponibles[:num_preguntas]
                     st.session_state.preguntas_simulador = [aleatorizar_pregunta(p) for p in preguntas_sel]
                     st.session_state.simulador_activo = True
                     st.session_state.indice_actual = 0

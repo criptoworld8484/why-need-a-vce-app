@@ -1,6 +1,6 @@
-# MyVCE Certificación
+# Why need a VCE app?
 
-Simulador de exámenes de certificación F5 BIG-IP con Streamlit.
+Simulador de exámenes de certificación con Streamlit.
 
 ---
 
@@ -55,21 +55,25 @@ cryptography>=41.0.0
 - Soporte para imágenes adjuntas
 - Multiple choice con hasta 6 opciones
 - Soporte para preguntas de respuesta múltiple
+- Tags para agrupar preguntas por vendor/categoría
 
 ### 2. Extracción OCR con Gemini
 - Extraer preguntas desde imágenes usando Google Gemini
 - Procesamiento automático de imágenes
 - Validación de preguntas extraídas
+- Asignación de tags al importar
 
 ### 3. Base de Datos de Preguntas
 - Ver todas las preguntas disponibles
-- Filtrar por estado (correctas/incorrectas)
-- Editar y eliminar preguntas
+- Filtrar por tag y texto
+- Editar tags inline y eliminar preguntas
 - Importar/Exportar en formato ZIP (incluye imágenes)
 
 ### 4. Simulador de Examen
 - **Modo Práctica**: Sin límite de tiempo, feedback inmediato
 - **Modo Examen**: Temporizador configurable, evaluación final
+- Filtrado por tags y rango ordinal
+- Orden aleatorio por defecto
 - Navegación entre preguntas
 - Seguimiento de progreso
 - Timer en tiempo real con cuenta regresiva
@@ -91,19 +95,13 @@ Para usar la función de OCR:
 ```
 MyVCE_Funcional/
 ├── app.py                    # Código fuente principal
-├── preguntas.json            # Base de preguntas del examen
-├── imagenes_preguntas/       # Imágenes de preguntas
-├── requirements.txt         # Dependencias de Python
-├── README.md                # Esta documentación
-├── src/                    # Módulos auxiliares
-│   ├── paths.py            # Gestión de rutas
-│   ├── api_key_manager.py  # Almacenamiento seguro de API keys
+├── requirements.txt          # Dependencias de Python
+├── README.md                 # Esta documentación
+├── src/                      # Módulos auxiliares
+│   ├── paths.py              # Gestión de rutas
+│   ├── api_key_manager.py    # Almacenamiento seguro de API keys
 │   └── __init__.py
-└── build/                  # Scripts de compilación
-    ├── build_windows.bat   # Preparar distribución Windows
-    ├── build_linux.sh     # Preparar distribución Linux
-    ├── MyVCE_Certificacion.bat  # Launcher Windows
-    └── MyVCE_Certificacion.sh   # Launcher Linux
+└── build/                    # Scripts de compilación
 ```
 
 ---
@@ -115,7 +113,6 @@ MyVCE_Funcional/
 - Especificar puerto: `python -m streamlit run app.py --server.port 8503`
 
 ### Error al cargar imágenes
-- Verificar que la carpeta `imagenes_preguntas/` existe
 - Las imágenes deben estar en formato PNG, JPG o JPEG
 
 ### Timer no actualiza

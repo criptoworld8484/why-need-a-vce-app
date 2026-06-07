@@ -23,25 +23,25 @@ def get_app_dir():
 def get_data_dir():
     """Retorna el directorio de datos del usuario.
     
-    Windows: %APPDATA%/MyVCE_Certificacion
-    Linux/Mac: ~/.local/share/MyVCE_Certificacion
+    Windows: %APPDATA%/WhyNeedAVCEApp
+    Linux/Mac: ~/.local/share/WhyNeedAVCEApp
     """
     if sys.platform == "win32":
         base = os.environ.get("APPDATA", tempfile.gettempdir())
     else:
         base = os.path.expanduser("~/.local/share")
-    return os.path.join(base, "MyVCE_Certificacion")
+    return os.path.join(base, "WhyNeedAVCEApp")
 
 
 def get_config_dir():
     """Retorna el directorio de configuracion del usuario.
     
-    Windows: %APPDATA%/MyVCE_Certificacion
-    Linux/Mac: ~/.config/MyVCE_Certificacion
+    Windows: %APPDATA%/WhyNeedAVCEApp
+    Linux/Mac: ~/.config/WhyNeedAVCEApp
     """
     if sys.platform == "win32":
         return os.environ.get("APPDATA", tempfile.gettempdir())
-    return os.path.join(os.path.expanduser("~/.config"), "MyVCE_Certificacion")
+    return os.path.join(os.path.expanduser("~/.config"), "WhyNeedAVCEApp")
 
 
 def get_resource_path(relative_path):
