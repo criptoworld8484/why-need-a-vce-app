@@ -71,21 +71,32 @@ st.markdown("""
         --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
         --radius-md: 12px;
         --radius-lg: 16px;
+        /* Override Streamlit dark theme variables */
+        --background-color: #f8fafc;
+        --secondary-background-color: #ffffff;
+        --text-color: #334155;
     }
 
-    /* Global Styles */
+    /* Global Styles - force light mode even if OS/browser is dark */
+    @media (prefers-color-scheme: dark) {
+        html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"],
+        [data-testid="stMain"], .block-container, section.main {
+            background-color: var(--bg-main) !important;
+            color: var(--text-body) !important;
+        }
+        html {
+            background-color: var(--bg-main) !important;
+        }
+    }
+
     .stApp {
         background-color: var(--bg-main) !important;
         font-family: 'Inter', sans-serif !important;
         color: var(--text-body) !important;
     }
 
-    /* ===== TEXTO GENERAL LEGIBLE ===== */
-    .stApp p, .stApp span, .stApp div, .stApp li, .stApp td, .stApp th {
-        color: var(--text-body) !important;
-    }
     
-    h1, h2, h3, h4, h5, h6, .stHeader {
+    h1, h2, h3, h4, h5, h6 {
         font-family: 'Outfit', sans-serif !important;
         color: var(--primary) !important;
         font-weight: 700 !important;
@@ -107,57 +118,17 @@ st.markdown("""
         background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
     }
 
-    /* ===== EXPANDERS LEGIBLES ===== */
-    .streamlit-expanderHeader {
-        background: white !important;
-        color: var(--primary) !important;
-        border: 1px solid var(--border-color) !important;
-        border-radius: var(--radius-md) !important;
-        font-family: 'Outfit', sans-serif !important;
-        font-weight: 600 !important;
-    }
-
-    .streamlit-expanderHeader:hover {
-        background: #fef9c3 !important;
-    }
-
-    .streamlit-expanderHeader button {
-        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
-        background-color: #fef08a !important;
-        color: var(--selection-text) !important;
-        border: 1px solid var(--selection-border) !important;
-        font-family: 'Outfit', sans-serif !important;
-        font-weight: 600 !important;
-    }
-
-    .streamlit-expanderHeader button:hover {
-        background: linear-gradient(135deg, #facc15 0%, #fef08a 100%) !important;
-        background-color: #facc15 !important;
-    }
-
     /* Contenido del expander - fondo blanco */
     .streamlit-expanderContent {
         background: white !important;
         color: var(--text-body) !important;
     }
 
-    /* Contenido interno del expander (secciones) */
-    .streamlit-expanderContent > div {
-        background: white !important;
-        padding: 16px !important;
-    }
-
-    .streamlit-expanderContent section {
-        background: white !important;
-        border: none !important;
-    }
-
     /* ===== EXPANDER SUMMARY (el elemento clickeable) ===== */
     /* Summary - elemento nativo del expander */
     details.streamlit-expander summary,
     .streamlit-expander summary,
-    [data-testid="stExpander"] summary,
-    .st-emotion-cache-11ofl8m {
+    [data-testid="stExpander"] summary {
         background-color: #fef08a !important;
         background: #fef08a !important;
         background-image: none !important;
@@ -186,8 +157,7 @@ st.markdown("""
     /* Hover summary - mismo color, sin animación */
     details.streamlit-expander summary:hover,
     .streamlit-expander summary:hover,
-    [data-testid="stExpander"] summary:hover,
-    .st-emotion-cache-11ofl8m:hover {
+    [data-testid="stExpander"] summary:hover {
         background-color: #fef08a !important;
         background: #fef08a !important;
         background-image: none !important;
@@ -198,8 +168,7 @@ st.markdown("""
 
     /* Span dentro del summary - texto principal */
     details.streamlit-expander summary span,
-    .streamlit-expander summary span,
-    .st-emotion-cache-nwb5ao {
+    .streamlit-expander summary span {
         color: #1e293b !important;
         font-weight: 600 !important;
         font-family: 'Outfit', sans-serif !important;
@@ -214,19 +183,6 @@ st.markdown("""
     }
 
     .streamlit-expanderHeader:hover {
-        background: linear-gradient(135deg, #facc15 0%, #fef08a 100%) !important;
-        background-color: #facc15 !important;
-    }
-
-    /* Botones dentro del contenido expandido */
-    .streamlit-expanderContent button {
-        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
-        background-color: #fef08a !important;
-        color: var(--selection-text) !important;
-        border: 1px solid var(--selection-border) !important;
-    }
-
-    .streamlit-expanderContent button:hover {
         background: linear-gradient(135deg, #facc15 0%, #fef08a 100%) !important;
         background-color: #facc15 !important;
     }
@@ -249,13 +205,8 @@ st.markdown("""
         color: var(--selection-text) !important;
     }
 
-    /* Tag badge dentro de expanders - contraste garantizado */
-    .streamlit-expanderContent div[style*="background: linear-gradient(135deg, #dbeafe"] {
-        background: #dbeafe !important;
-        border: 1px solid #3b82f6 !important;
-    }
-
-    .streamlit-expanderContent div[style*="background: linear-gradient(135deg, #dbeafe"] span {
+    /* Tags en alerts - contraste garantizado */
+    div[data-testid="stAlert"] p strong {
         color: #1e40af !important;
     }
 
@@ -274,9 +225,6 @@ st.markdown("""
     }
 
     /* Section con emotion-cache - fondo claro */
-    section[class*="emotion-cache"],
-    .st-emotion-cache-1k,
-    .st-emotion-cache-1g2m64y,
     [data-testid="stForm"] {
         background-color: var(--bg-card) !important;
         border: 1px solid var(--border-color) !important;
@@ -312,8 +260,8 @@ st.markdown("""
     }
 
     /* Section headers */
-    .st-emotion-cache-1k h3,
-    .st-emotion-cache-1k h2 {
+    [data-testid="stForm"] h3,
+    [data-testid="stForm"] h2 {
         color: var(--primary) !important;
         margin-bottom: 16px !important;
     }
@@ -332,16 +280,6 @@ st.markdown("""
     /* Sidebar container */
     [data-testid="stSidebar"] {
         background-color: var(--bg-card) !important;
-    }
-
-    /* Fix alineación de elementos en columnas */
-    .stColumns > div {
-        display: flex !important;
-        flex-direction: column !important;
-    }
-
-    .stColumns > div > div {
-        flex: 1 !important;
     }
 
     /* ===== BOTONES - TODOS AMARILLOS, SIN CAMBIOS EN HOVER ===== */
@@ -481,34 +419,16 @@ st.markdown("""
         color: var(--selection-text) !important;
     }
 
-    /* ===== BOTONES MEJORADOS - TODOS AMARILLOS ===== */
-    .stButton > button,
-    .stButton > button:focus,
-    .stButton > button:focus-visible,
-    .stButton > button:not([data-testid]):not([kind]) {
-        font-family: 'Outfit', sans-serif !important;
-        font-weight: 600 !important;
+    /* ===== BOTONES - extra ===== */
+    .stButton > button {
         border-radius: var(--radius-md) !important;
         padding: 10px 24px !important;
         transition: all 0.2s ease !important;
-        background: linear-gradient(135deg, var(--selection-bg) 0%, #fef9c3 100%) !important;
-        background-color: #fef08a !important;
-        color: var(--selection-text) !important;
-        border: 1px solid var(--selection-border) !important;
         box-shadow: 0 4px 6px -1px rgba(250, 204, 21, 0.3) !important;
     }
 
     .stButton > button:hover {
-        background: linear-gradient(135deg, #facc15 0%, #fef08a 100%) !important;
-        background-color: #facc15 !important;
-        transform: translateY(-1px) !important;
         box-shadow: 0 10px 15px -3px rgba(250, 204, 21, 0.4) !important;
-    }
-
-    .stButton > button:active {
-        background: #facc15 !important;
-        background-color: #facc15 !important;
-        transform: translateY(0) !important;
     }
 
     /* ===== NAVEGACIÓN (TABS) ===== */
@@ -594,28 +514,25 @@ st.markdown("""
         color: var(--primary) !important;
     }
 
-    /* ===== TOOLTIP / HELP POPOVER - AGRESIVO ===== */
-    div[data-testid="stTooltip"],
-    div[data-testid="stTooltipContent"],
-    div[data-testid="stTooltipIcon"],
-    div[data-testid="stPopover"],
-    div[data-testid="stPopoverContent"],
-    div[data-testid="help"],
-    [role="tooltip"],
-    [role="dialog"],
-    .stTooltip,
-    .stPopover {
-        background: white !important;
-        color: var(--text-body) !important;
-        border-color: var(--border-color) !important;
+    /* ===== TOOLTIP / HELP ===== */
+    [role="tooltip"] {
+        background: #ffffff !important;
+        color: #1e293b !important;
     }
 
-    div[data-testid="stTooltip"] *,
-    div[data-testid="stTooltipContent"] *,
-    div[data-testid="stPopover"] *,
-    div[data-testid="stPopoverContent"] *,
-    [role="tooltip"] * {
-        color: var(--text-body) !important;
+    [data-testid="stTooltipContent"] {
+        background: #ffffff !important;
+        color: #1e293b !important;
+    }
+
+    [data-testid="stTooltipContent"] p,
+    [data-testid="stTooltipContent"] span {
+        color: #1e293b !important;
+    }
+
+    [role="tooltip"] p,
+    [role="tooltip"] span {
+        color: #1e293b !important;
     }
 
     /* ===== FILE UPLOADER DRAG & DROP BUTTONS ===== */
@@ -1806,17 +1723,25 @@ elif pestana_seleccionada == "🎮 Simulador":
             
             st.markdown("---")
             
+            if len(preguntas_disponibles) == 0:
+                st.error("❌ No hay preguntas disponibles con el rango/tag seleccionado.")
+                st.stop()
+            
             col1, col2 = st.columns([2, 1])
             
             with col1:
-                num_preguntas = st.slider(
-                    "🎯 Número de preguntas del examen",
-                    min_value=1,
-                    max_value=len(preguntas_disponibles),
-                    value=min(10, len(preguntas_disponibles)),
-                    step=1,
-                    help="Desliza para seleccionar cuántas preguntas quieres"
-                )
+                if len(preguntas_disponibles) == 1:
+                    num_preguntas = 1
+                    st.info("📋 Solo hay 1 pregunta disponible en el pool seleccionado.")
+                else:
+                    num_preguntas = st.slider(
+                        "🎯 Número de preguntas del examen",
+                        min_value=1,
+                        max_value=len(preguntas_disponibles),
+                        value=min(10, len(preguntas_disponibles)),
+                        step=1,
+                        help="Desliza para seleccionar cuántas preguntas quieres"
+                    )
                 
                 st.caption(f"📊 Seleccionadas: **{num_preguntas}** de {len(preguntas_disponibles)} preguntas disponibles")
             
