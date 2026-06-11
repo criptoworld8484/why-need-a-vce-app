@@ -36,5 +36,6 @@ temp_*.png
 app.py.backup
 
 # Streamlit
-.streamlit/
+.streamlit/*
+!.streamlit/config.toml
 *.streamlit_cache
