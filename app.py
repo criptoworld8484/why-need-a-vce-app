@@ -1795,6 +1795,7 @@ elif pestana_seleccionada == "🎮 Simulador":
             res = st.session_state.resultado_final
             
             st.markdown("## 🎯 Resultados del Examen")
+            st.markdown('<div id="reporte-topo"></div>', unsafe_allow_html=True)
             
             col1, col2, col3, col4 = st.columns(4)
             
@@ -1822,7 +1823,7 @@ elif pestana_seleccionada == "🎮 Simulador":
             with col_filtro1:
                 filtro = st.radio(
                     "Mostrar:",
-                    ["Todas las preguntas", "Solo incorrectas", "Solo correctas"],
+                    ["Todas las preguntas", "Solo incorrectas", "Solo correctas", "Solo parciales"],
                     horizontal=True
                 )
             
@@ -1860,6 +1861,8 @@ elif pestana_seleccionada == "🎮 Simulador":
                     preguntas_revision.append((i, preg, resp_usuario, estado))
                 elif filtro == "Solo correctas" and estado == "correcta":
                     preguntas_revision.append((i, preg, resp_usuario, estado))
+                elif filtro == "Solo parciales" and estado == "parcial":
+                    preguntas_revision.append((i, preg, resp_usuario, estado))
             
             if not preguntas_revision:
                 st.info(f"ℹ️ No hay preguntas con el filtro '{filtro}'")
@@ -1868,6 +1871,7 @@ elif pestana_seleccionada == "🎮 Simulador":
                 
                 for idx_rev, (idx_orig, preg, resp_usuario, estado) in enumerate(preguntas_revision):
                     
+                    st.markdown(f'<div id="pregunta-{idx_orig}"></div>', unsafe_allow_html=True)
                     st.markdown("---")
                     
                     if estado == "correcta":
@@ -1965,6 +1969,40 @@ elif pestana_seleccionada == "🎮 Simulador":
                             st.info(f"Requiere {len(preg['correctas'])} opciones")
                         else:
                             st.info("Respuesta única")
+                
+                # === PANEL DE NAVEGACIÓN FLOTANTE ===
+                badges_nav = ""
+                for idx_rev, (idx_orig, preg, resp_usuario, estado) in enumerate(preguntas_revision):
+                    color = "#10b981" if estado == "correcta" else "#f59e0b" if estado == "parcial" else "#ef4444"
+                    badges_nav += f'<a href="#pregunta-{idx_orig}" class="flotbadge" style="background:{color};" title="P{idx_orig+1} - {estado.upper()}">{idx_orig+1}</a>'
+
+                ultimo_idx = preguntas_revision[-1][0] if preguntas_revision else 0
+
+                nav_html = f"""
+                <style>
+                html {{ scroll-behavior: smooth; }}
+                .flotnav{{position:fixed!important;bottom:20px!important;right:20px!important;z-index:99999!important;
+                background:rgba(17,24,39,0.95);border-radius:14px;padding:12px;
+                box-shadow:0 4px 24px rgba(0,0,0,0.4);max-height:320px;
+                overflow-y:auto;font-family:sans-serif;min-width:60px;}}
+                .flotbadge{{display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;
+                border-radius:50%;color:#fff;font-size:11px;font-weight:700;margin:2px;cursor:pointer;
+                transition:transform 0.15s;text-decoration:none;}}
+                .flotbadge:hover{{transform:scale(1.35);filter:brightness(1.2);}}
+                .flotnav-btn{{display:block;width:100%;padding:7px;margin:4px 0;border:none;border-radius:8px;
+                cursor:pointer;font-weight:700;font-size:13px;text-align:center;color:#fff;text-decoration:none;}}
+                .flotnav-top{{background:linear-gradient(135deg,#3b82f6,#2563eb);}}
+                .flotnav-bottom{{background:linear-gradient(135deg,#6b7280,#4b5563);}}
+                .flotnav-label{{color:#9ca3af;font-size:10px;text-align:center;margin:4px 0 2px;}}
+                </style>
+                <div class="flotnav">
+                    <a href="#reporte-topo" class="flotnav-btn flotnav-top">&#11014; Inicio</a>
+                    <div class="flotnav-label">Preguntas</div>
+                    <div style="text-align:center;">{badges_nav}</div>
+                    <a href="#pregunta-{ultimo_idx}" class="flotnav-btn flotnav-bottom">&#11015; Fin</a>
+                </div>
+                """
+                st.markdown(nav_html, unsafe_allow_html=True)
                 
                 st.markdown("---")
                 col_f1, col_f2, col_f3 = st.columns([1, 2, 1])
