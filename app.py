@@ -1740,6 +1740,7 @@ elif pestana_seleccionada == "🎮 Simulador":
                         max_value=len(preguntas_disponibles),
                         value=min(10, len(preguntas_disponibles)),
                         step=1,
+                        key="num_preguntas_slider",
                         help="Desliza para seleccionar cuántas preguntas quieres"
                     )
                 
@@ -1775,7 +1776,17 @@ elif pestana_seleccionada == "🎮 Simulador":
             if st.button("🚀 Iniciar Examen", type="primary", use_container_width=True):
                 with st.spinner("🎮 Preparando tu examen personalizado..."):
                     preguntas_sel = random.sample(preguntas_disponibles, num_preguntas) if modo_aleatorio else preguntas_disponibles[:num_preguntas]
-                    st.session_state.preguntas_simulador = [aleatorizar_pregunta(p) for p in preguntas_sel]
+                    # Deduplicar por texto de pregunta (safety net contra duplicados)
+                    vistos = set()
+                    preguntas_unicas = []
+                    for p in preguntas_sel:
+                        texto = p.get("pregunta", "").strip()
+                        if texto not in vistos:
+                            vistos.add(texto)
+                            preguntas_unicas.append(p)
+                    if len(preguntas_unicas) < len(preguntas_sel):
+                        st.warning(f"⚠️ Se eliminaron {len(preguntas_sel) - len(preguntas_unicas)} pregunta(s) duplicada(s).")
+                    st.session_state.preguntas_simulador = [aleatorizar_pregunta(p) for p in preguntas_unicas]
                     st.session_state.simulador_activo = True
                     st.session_state.indice_actual = 0
                     st.session_state.respuestas_usuario = {}
@@ -1984,7 +1995,14 @@ elif pestana_seleccionada == "🎮 Simulador":
                 .flotnav{{position:fixed!important;bottom:20px!important;right:20px!important;z-index:99999!important;
                 background:rgba(17,24,39,0.95);border-radius:14px;padding:12px;
                 box-shadow:0 4px 24px rgba(0,0,0,0.4);max-height:320px;
-                overflow-y:auto;font-family:sans-serif;min-width:60px;}}
+                overflow-y:auto;font-family:sans-serif;min-width:60px;
+                transition:opacity 0.3s, transform 0.3s;}}
+                .flotnav-hide:checked ~ .flotnav{{opacity:0;pointer-events:none;transform:translateY(20px);}}
+                .flotnav-toggle{{position:fixed!important;bottom:20px!important;right:20px!important;z-index:100000!important;
+                background:#ef4444;border:none;border-radius:50%;width:40px;height:40px;
+                cursor:pointer;color:white;font-weight:700;font-size:18px;display:none;
+                box-shadow:0 2px 12px rgba(239,68,68,0.5);line-height:40px;text-align:center;}}
+                .flotnav-hide:checked ~ .flotnav-toggle{{display:block;}}
                 .flotbadge{{display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;
                 border-radius:50%;color:#fff;font-size:11px;font-weight:700;margin:2px;cursor:pointer;
                 transition:transform 0.15s;text-decoration:none;}}
@@ -1994,9 +2012,17 @@ elif pestana_seleccionada == "🎮 Simulador":
                 .flotnav-top{{background:linear-gradient(135deg,#3b82f6,#2563eb);}}
                 .flotnav-bottom{{background:linear-gradient(135deg,#6b7280,#4b5563);}}
                 .flotnav-label{{color:#9ca3af;font-size:10px;text-align:center;margin:4px 0 2px;}}
+                .flotnav-close{{position:absolute;top:6px;right:10px;background:none;border:none;
+                color:#9ca3af;font-size:18px;cursor:pointer;padding:0;line-height:1;z-index:1;}}
+                .flotnav-close:hover{{color:#ef4444;}}
                 </style>
+                <input type="checkbox" id="flotnav-hide" class="flotnav-hide" style="display:none;">
+                <label for="flotnav-hide" class="flotnav-toggle" title="Mostrar panel de navegacion">&#9776;</label>
                 <div class="flotnav">
-                    <a href="#reporte-topo" class="flotnav-btn flotnav-top">&#11014; Inicio</a>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                        <a href="#reporte-topo" class="flotnav-btn flotnav-top" style="flex:1;margin-right:8px;">&#11014; Inicio</a>
+                        <label for="flotnav-hide" class="flotnav-close" title="Ocultar panel">&#10005;</label>
+                    </div>
                     <div class="flotnav-label">Preguntas</div>
                     <div style="text-align:center;">{badges_nav}</div>
                     <a href="#pregunta-{ultimo_idx}" class="flotnav-btn flotnav-bottom">&#11015; Fin</a>
