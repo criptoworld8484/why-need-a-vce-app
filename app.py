@@ -17,6 +17,7 @@ ST_FRAGMENT_AVAILABLE = hasattr(st, 'fragment')
 
 from src.paths import get_app_dir, get_data_dir
 from src.api_key_manager import save_api_key, load_api_key, has_api_key
+from src.seleccion import SIN_TAG, seleccionar_pool, deduplicar, detectar_conflictos
 
 # ✅ CONFIGURACIÓN PROTEGIDA DE OPENCV
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "0"
@@ -1417,6 +1418,20 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
 
     else:
         st.success(f"✅ {len(preguntas)} pregunta(s) guardada(s)")
+
+        _unicas, _dups = deduplicar(preguntas)
+        if _dups:
+            _ids_dup = ", ".join(f"#{p.get('id')}" for p in _dups)
+            st.warning(
+                f"⚠️ Hay {len(_dups)} pregunta(s) repetida(s) en el banco ({_ids_dup}). "
+                "El simulador las omite automáticamente, pero puedes borrarlas aquí."
+            )
+        for _grupo in detectar_conflictos(preguntas):
+            _ids_conf = " y ".join(f"#{i}" for i in _grupo)
+            st.error(
+                f"❌ Las preguntas {_ids_conf} son iguales pero tienen respuestas correctas "
+                "distintas. Una de las dos está mal: corrígela o bórrala."
+            )
         
         tags_unicos = sorted(set(p.get("tag", "") for p in preguntas if p.get("tag", "")))
         tiene_sin_tag = any(not p.get("tag", "") for p in preguntas)
@@ -1571,10 +1586,16 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
         if buscar.strip() or tags_filtrar:
             st.caption(f"🔍 {len(preguntas_filtradas)} resultado(s)")
         
+        # Posición en el banco completo: es la numeración que usa el rango ordinal
+        # del simulador, y no coincide con el #id cuando se han borrado preguntas.
+        posiciones = {id(p): i + 1 for i, p in enumerate(preguntas)}
+
         for q in preguntas_filtradas:
             p_mostrar = aleatorizar_pregunta(q) if mostrar_aleatorio else q
+            n_orden = posiciones.get(id(q), "?")
             
-            with st.expander(f"❓ #{q['id']}: {q['pregunta'][:70]}..."):
+            with st.expander(f"❓ N.º {n_orden} · #{q['id']}: {q['pregunta'][:60]}..."):
+                st.caption(f"N.º de orden **{n_orden}** (para el rango del simulador) · id interno #{q['id']}")
                 tag_actual = q.get("tag", "")
                 if tag_actual:
                     st.info(f"🏷️ **Tag:** {tag_actual}")
@@ -1655,72 +1676,101 @@ elif pestana_seleccionada == "🎮 Simulador":
             
             st.markdown("### ⚙️ Configurar Examen")
             
+            # El rango ordinal se refiere SIEMPRE a la posición en el banco completo,
+            # que es la numeración "N.º X" que muestra la pestaña "Ver Preguntas".
             tags_simulador = sorted(set(p.get("tag", "") for p in preguntas if p.get("tag", "")))
-            if tags_simulador:
+            hay_sin_tag = any(not p.get("tag", "") for p in preguntas)
+            opciones_tags = tags_simulador + ([SIN_TAG] if hay_sin_tag else [])
+
+            if opciones_tags:
                 tags_seleccionados = st.multiselect(
                     "🏷️ Seleccionar tags a incluir",
-                    options=tags_simulador,
-                    default=tags_simulador,
+                    options=opciones_tags,
+                    default=opciones_tags,
                     key="tags_simulador",
                     help="Selecciona qué tags incluir en el examen. Si no seleccionas ninguno, se incluyen todas las preguntas."
                 )
-                if tags_seleccionados:
-                    preguntas_con_tag = [p for p in preguntas if p.get("tag", "") in tags_seleccionados]
-                else:
-                    preguntas_con_tag = preguntas
             else:
-                preguntas_con_tag = preguntas
                 tags_seleccionados = []
-            
-            total_con_tag = len(preguntas_con_tag)
-            
+
             st.markdown("---")
-            
+
             usar_rango = st.checkbox(
                 "📏 Seleccionar por rango ordinal",
                 value=False,
                 key="usar_rango",
-                help="Activa para elegir un rango específico de preguntas (ej: preguntas 1 a 11)"
+                help="Elige un tramo del banco por su número de orden (el 'N.º' que se ve en 'Ver Preguntas')"
             )
-            
+
+            rango = None
             if usar_rango:
-                max_rango = max(total_con_tag, 1)
-                
-                if "rango_inicio" in st.session_state:
-                    st.session_state.rango_inicio = min(st.session_state.rango_inicio, max_rango)
-                if "rango_fin" in st.session_state:
-                    st.session_state.rango_fin = min(st.session_state.rango_fin, max_rango)
-                
+                max_rango = max(len(preguntas), 1)
+
+                for clave in ("rango_inicio", "rango_fin"):
+                    if clave in st.session_state:
+                        st.session_state[clave] = max(1, min(st.session_state[clave], max_rango))
+
                 col_r1, col_r2 = st.columns(2)
                 with col_r1:
                     rango_inicio = st.number_input(
-                        "Desde (pregunta #)",
+                        "Desde (N.º de orden)",
                         min_value=1,
                         max_value=max_rango,
                         step=1,
                         key="rango_inicio",
-                        help="Número de pregunta de inicio (orden según 'Ver Preguntas')"
+                        help="Número de orden inicial según 'Ver Preguntas' (no es el #id)"
                     )
                 with col_r2:
                     rango_fin = st.number_input(
-                        "Hasta (pregunta #)",
+                        "Hasta (N.º de orden)",
                         min_value=1,
                         max_value=max_rango,
                         step=1,
                         key="rango_fin",
-                        help="Número de pregunta de fin (orden según 'Ver Preguntas')"
+                        help="Número de orden final según 'Ver Preguntas' (no es el #id)"
                     )
-                
+
                 if rango_inicio > rango_fin:
-                    st.warning("⚠️ El rango inicio no puede ser mayor que el fin. Se ajustará automáticamente.")
-                    rango_fin = max(rango_inicio, rango_fin)
-                
-                preguntas_disponibles = preguntas_con_tag[rango_inicio - 1:rango_fin]
-                st.caption(f"📋 Rango aplicado: preguntas **{rango_inicio}** a **{rango_fin}** → **{len(preguntas_disponibles)}** preguntas seleccionadas")
+                    st.info("ℹ️ Rango invertido: se interpretará como "
+                            f"{rango_fin} a {rango_inicio}.")
+                rango = (rango_inicio, rango_fin)
+
+            preguntas_disponibles, info_pool = seleccionar_pool(
+                preguntas, tags_seleccionados=tags_seleccionados, rango=rango
+            )
+
+            if rango:
+                r_ini, r_fin = info_pool["rango"]
+                st.caption(
+                    f"📋 Rango **{r_ini}–{r_fin}** del banco "
+                    f"({info_pool['tras_rango']} preguntas) → tras filtrar por tags: "
+                    f"**{len(preguntas_disponibles)}** disponibles"
+                )
+                if preguntas_disponibles:
+                    ids_incluidos = [p.get("id") for p in preguntas_disponibles]
+                    st.caption(f"🆔 Incluye los ids: {', '.join(str(i) for i in ids_incluidos)}")
+                elif info_pool["tras_rango"] > 0:
+                    st.warning(
+                        "⚠️ Ninguna pregunta de ese tramo tiene los tags seleccionados. "
+                        "Amplía el rango o cambia los tags."
+                    )
             else:
-                preguntas_disponibles = preguntas_con_tag
                 st.caption(f"📋 Pool completo: **{len(preguntas_disponibles)}** preguntas")
-            
+
+            if info_pool["duplicados"]:
+                ids_dup = ", ".join(str(i) for i in info_pool["ids_duplicados"])
+                st.info(
+                    f"ℹ️ Se apartó **{info_pool['duplicados']}** pregunta(s) repetida(s) "
+                    f"del pool (id: {ids_dup}) para que no salgan dos veces."
+                )
+
+            for grupo in info_pool["conflictos"]:
+                ids_conf = " y ".join(str(i) for i in grupo)
+                st.warning(
+                    f"⚠️ Las preguntas {ids_conf} son iguales pero tienen respuestas "
+                    "correctas distintas. Revísalas en 'Ver Preguntas': una de las dos está mal."
+                )
+
             st.markdown("---")
             
             if len(preguntas_disponibles) == 0:
@@ -1734,15 +1784,25 @@ elif pestana_seleccionada == "🎮 Simulador":
                     num_preguntas = 1
                     st.info("📋 Solo hay 1 pregunta disponible en el pool seleccionado.")
                 else:
+                    # El pool cambia de tamaño al tocar rango o tags. Se guarda
+                    # aparte cuántas preguntas quiere el usuario y solo se recorta
+                    # para mostrar: así el valor no se queda "trinquetado" abajo
+                    # cuando el pool vuelve a crecer.
+                    tope = len(preguntas_disponibles)
+                    deseado = st.session_state.get("num_preguntas_deseado", 10)
+                    mostrado = max(1, min(deseado, tope))
                     num_preguntas = st.slider(
                         "🎯 Número de preguntas del examen",
                         min_value=1,
-                        max_value=len(preguntas_disponibles),
-                        value=min(10, len(preguntas_disponibles)),
+                        max_value=tope,
+                        value=mostrado,
                         step=1,
-                        key="num_preguntas_slider",
                         help="Desliza para seleccionar cuántas preguntas quieres"
                     )
+                    # Solo se registra como intención del usuario si movió el slider
+                    # (o si el pool da de sobra), nunca el recorte automático.
+                    if num_preguntas != mostrado or tope >= deseado:
+                        st.session_state.num_preguntas_deseado = num_preguntas
                 
                 st.caption(f"📊 Seleccionadas: **{num_preguntas}** de {len(preguntas_disponibles)} preguntas disponibles")
             
@@ -1775,18 +1835,10 @@ elif pestana_seleccionada == "🎮 Simulador":
             
             if st.button("🚀 Iniciar Examen", type="primary", use_container_width=True):
                 with st.spinner("🎮 Preparando tu examen personalizado..."):
+                    # preguntas_disponibles ya viene sin duplicados desde seleccionar_pool(),
+                    # así que el muestreo entrega siempre el número de preguntas pedido.
                     preguntas_sel = random.sample(preguntas_disponibles, num_preguntas) if modo_aleatorio else preguntas_disponibles[:num_preguntas]
-                    # Deduplicar por texto de pregunta (safety net contra duplicados)
-                    vistos = set()
-                    preguntas_unicas = []
-                    for p in preguntas_sel:
-                        texto = p.get("pregunta", "").strip()
-                        if texto not in vistos:
-                            vistos.add(texto)
-                            preguntas_unicas.append(p)
-                    if len(preguntas_unicas) < len(preguntas_sel):
-                        st.warning(f"⚠️ Se eliminaron {len(preguntas_sel) - len(preguntas_unicas)} pregunta(s) duplicada(s).")
-                    st.session_state.preguntas_simulador = [aleatorizar_pregunta(p) for p in preguntas_unicas]
+                    st.session_state.preguntas_simulador = [aleatorizar_pregunta(p) for p in preguntas_sel]
                     st.session_state.simulador_activo = True
                     st.session_state.indice_actual = 0
                     st.session_state.respuestas_usuario = {}
@@ -1888,19 +1940,19 @@ elif pestana_seleccionada == "🎮 Simulador":
                     if estado == "correcta":
                         st.markdown(f"""
                         <div style='background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 16px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);'>
-                            <h3 style='margin: 0; font-size: 20px;'>✅ Pregunta {idx_orig + 1} - CORRECTA</h3>
+                            <h3 style='margin: 0; font-size: 20px;'>✅ Pregunta {idx_orig + 1} - CORRECTA <span style='font-size:14px;font-weight:500;opacity:0.75;'>(#{preg.get('id','?')})</span></h3>
                         </div>
                         """, unsafe_allow_html=True)
                     elif estado == "parcial":
                         st.markdown(f"""
                         <div style='background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 16px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);'>
-                            <h3 style='margin: 0; font-size: 20px;'>🟡 Pregunta {idx_orig + 1} - PARCIAL</h3>
+                            <h3 style='margin: 0; font-size: 20px;'>🟡 Pregunta {idx_orig + 1} - PARCIAL <span style='font-size:14px;font-weight:500;opacity:0.75;'>(#{preg.get('id','?')})</span></h3>
                         </div>
                         """, unsafe_allow_html=True)
                     else:
                         st.markdown(f"""
                         <div style='background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 16px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);'>
-                            <h3 style='margin: 0; font-size: 20px;'>❌ Pregunta {idx_orig + 1} - INCORRECTA</h3>
+                            <h3 style='margin: 0; font-size: 20px;'>❌ Pregunta {idx_orig + 1} - INCORRECTA <span style='font-size:14px;font-weight:500;opacity:0.75;'>(#{preg.get('id','?')})</span></h3>
                         </div>
                         """, unsafe_allow_html=True)
                     
