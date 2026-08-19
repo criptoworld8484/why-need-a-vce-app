@@ -25,14 +25,28 @@ pool, info = seleccionar_pool(banco, tags_seleccionados=[], rango=(2, 4))
 check("rango 2-4 devuelve exactamente 3 preguntas", len(pool) == 3, f"-> {len(pool)}")
 check("rango 2-4 devuelve las posiciones 2,3,4 del banco",
       [p["id"] for p in pool] == [3, 7, 12], f"-> {[p['id'] for p in pool]}")
-check("info expone los numeros de posicion pedidos", info["rango"] == (2, 4), f"-> {info['rango']}")
+check("info expone los numeros de orden pedidos", info["rango"] == (2, 4), f"-> {info['rango']}")
 
-print("\n== RC1b: el rango NO debe desplazarse al filtrar por tags ==")
+print("\n== RC1b: el rango cuenta SOBRE LA LISTA YA FILTRADA POR TAG ==")
+# El usuario elige "las 5 primeras de PaloAlto": se cuenta de arriba abajo
+# dentro del tag, sin mirar el numero propio de cada pregunta.
 banco2 = [q(1, "p1", tag="A"), q(2, "p2", tag="B"), q(3, "p3", tag="A"),
           q(4, "p4", tag="B"), q(5, "p5", tag="A")]
 pool, info = seleccionar_pool(banco2, tags_seleccionados=["A"], rango=(1, 3))
-check("rango 1-3 + tag A = interseccion (posiciones 1..3 que son tag A)",
-      [p["id"] for p in pool] == [1, 3], f"-> {[p['id'] for p in pool]}")
+check("rango 1-3 + tag A = las 3 primeras del tag A",
+      [p["id"] for p in pool] == [1, 3, 5], f"-> {[p['id'] for p in pool]}")
+pool, info = seleccionar_pool(banco2, tags_seleccionados=["B"], rango=(1, 2))
+check("rango 1-2 + tag B = las 2 primeras del tag B",
+      [p["id"] for p in pool] == [2, 4], f"-> {[p['id'] for p in pool]}")
+
+# Caso practico del usuario: primera de PaloAlto es la #135, pide 1-5.
+banco_pa = [q(10 + i, f"fg{i}", tag="Fortigate") for i in range(40)]
+banco_pa += [q(n, f"pa{n}", tag="PaloAlto") for n in (135, 87, 40, 201, 9, 150)]
+pool, info = seleccionar_pool(banco_pa, tags_seleccionados=["PaloAlto"], rango=(1, 5))
+check("1-5 de PaloAlto = las 5 primeras tal como aparecen, sin mirar su numero",
+      [p["id"] for p in pool] == [135, 87, 40, 201, 9], f"-> {[p['id'] for p in pool]}")
+check("el maximo del rango es el tamano del tag, no el del banco",
+      info["total_filtrado"] == 6, f"-> {info['total_filtrado']}")
 
 print("\n== RC3: preguntas sin tag no deben desaparecer ==")
 banco3 = [q(1, "p1", tag="A"), q(2, "p2", tag=""), q(3, "p3", tag="A")]

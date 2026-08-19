@@ -115,36 +115,38 @@ def seleccionar_pool(banco, tags_seleccionados=None, rango=None):
     """Construye el pool de preguntas elegibles para un examen.
 
     Orden de operaciones (importa):
-      1. El rango se aplica sobre las POSICIONES del banco completo, que es la
-         numeración que se ve en "Ver Preguntas". Aplicarlo después del filtro
-         de tags desplazaría los números y devolvería preguntas de otro tramo.
-      2. Despues se filtra por tags (interseccion con el rango).
-      3. Por ultimo se quitan duplicados, ANTES de muestrear, para que el examen
-         tenga el número de preguntas pedido y no una cantidad menor.
+      1. Primero se filtra por tags.
+      2. El rango se aplica sobre ese resultado, contando de arriba abajo tal
+         como aparece en "Ver Preguntas" con ese mismo filtro. Es un numero de
+         orden, NO el #id de la pregunta: si la primera del tag es la #135, el
+         rango 1-5 empieza en ella y coge las cuatro siguientes. Asi la
+         numeracion no depende de los ids, que cambian al borrar preguntas.
+      3. Por ultimo se quitan duplicados. Va al final para que el tramo
+         seleccionado sea exactamente el que se ve en "Ver Preguntas"; si el
+         tramo trae repetidas, se avisa en vez de arrastrarlas al examen.
 
     Devuelve (pool, info) donde info documenta lo aplicado para mostrarlo en la UI.
     """
     tags_seleccionados = tags_seleccionados or []
-    total = len(banco)
+
+    filtrado = [p for p in banco if coincide_tag(p, tags_seleccionados)]
+    total_filtrado = len(filtrado)
 
     if rango:
-        inicio, fin = normalizar_rango(rango, total)
-        seleccion = banco[inicio - 1:fin]
+        inicio, fin = normalizar_rango(rango, total_filtrado)
+        seleccion = filtrado[inicio - 1:fin]
     else:
-        inicio, fin = (1, total)
-        seleccion = list(banco)
+        inicio, fin = (1, total_filtrado)
+        seleccion = list(filtrado)
 
     tras_rango = len(seleccion)
-    seleccion = [p for p in seleccion if coincide_tag(p, tags_seleccionados)]
-    tras_tags = len(seleccion)
-
     pool, descartadas = deduplicar(seleccion)
 
     info = {
         "rango": (inicio, fin) if rango else None,
-        "total_banco": total,
+        "total_banco": len(banco),
+        "total_filtrado": total_filtrado,
         "tras_rango": tras_rango,
-        "tras_tags": tras_tags,
         "duplicados": len(descartadas),
         "ids_duplicados": [p.get("id") for p in descartadas],
         "conflictos": detectar_conflictos(seleccion),

@@ -17,7 +17,8 @@ ST_FRAGMENT_AVAILABLE = hasattr(st, 'fragment')
 
 from src.paths import get_app_dir, get_data_dir
 from src.api_key_manager import save_api_key, load_api_key, has_api_key
-from src.seleccion import SIN_TAG, seleccionar_pool, deduplicar, detectar_conflictos
+from src.seleccion import (SIN_TAG, seleccionar_pool, deduplicar, detectar_conflictos,
+                           coincide_tag)
 
 # ✅ CONFIGURACIÓN PROTEGIDA DE OPENCV
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "0"
@@ -1574,28 +1575,29 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
         if buscar.strip():
             preguntas_filtradas = [p for p in preguntas_filtradas if buscar.lower() in p['pregunta'].lower()]
         if tags_filtrar:
-            def matches_tag(p, tags):
-                t = p.get("tag", "")
-                for tag_sel in tags:
-                    if tag_sel == "Sin tag" and not t:
-                        return True
-                    elif tag_sel == t:
-                        return True
-                return False
-            preguntas_filtradas = [p for p in preguntas_filtradas if matches_tag(p, tags_filtrar)]
+            preguntas_filtradas = [p for p in preguntas_filtradas if coincide_tag(p, tags_filtrar)]
         if buscar.strip() or tags_filtrar:
             st.caption(f"🔍 {len(preguntas_filtradas)} resultado(s)")
-        
-        # Posición en el banco completo: es la numeración que usa el rango ordinal
-        # del simulador, y no coincide con el #id cuando se han borrado preguntas.
-        posiciones = {id(p): i + 1 for i, p in enumerate(preguntas)}
+
+        # Numeracion de orden: se cuenta sobre el filtro de tags (no sobre la
+        # busqueda de texto), que es exactamente lo que mide el rango del
+        # simulador cuando se elige ese mismo tag.
+        base_orden = [p for p in preguntas if coincide_tag(p, tags_filtrar)]
+        posiciones = {id(p): i + 1 for i, p in enumerate(base_orden)}
+        if tags_filtrar:
+            st.caption(
+                f"🔢 El **N.º** cuenta dentro del filtro de tags activo "
+                f"({len(base_orden)} preguntas): es el número que usa el rango del simulador."
+            )
+        else:
+            st.caption("🔢 El **N.º** es el orden de aparición: es el número que usa el rango del simulador.")
 
         for q in preguntas_filtradas:
             p_mostrar = aleatorizar_pregunta(q) if mostrar_aleatorio else q
             n_orden = posiciones.get(id(q), "?")
             
             with st.expander(f"❓ N.º {n_orden} · #{q['id']}: {q['pregunta'][:60]}..."):
-                st.caption(f"N.º de orden **{n_orden}** (para el rango del simulador) · id interno #{q['id']}")
+                st.caption(f"N.º de orden **{n_orden}** (el que usa el rango del simulador) · id interno #{q['id']}")
                 tag_actual = q.get("tag", "")
                 if tag_actual:
                     st.info(f"🏷️ **Tag:** {tag_actual}")
@@ -1676,8 +1678,9 @@ elif pestana_seleccionada == "🎮 Simulador":
             
             st.markdown("### ⚙️ Configurar Examen")
             
-            # El rango ordinal se refiere SIEMPRE a la posición en el banco completo,
-            # que es la numeración "N.º X" que muestra la pestaña "Ver Preguntas".
+            # El rango es un numero de orden sobre la lista YA FILTRADA por tag,
+            # contando de arriba abajo igual que se ve en "Ver Preguntas" con ese
+            # mismo filtro. Nunca es el #id: los ids cambian al borrar preguntas.
             tags_simulador = sorted(set(p.get("tag", "") for p in preguntas if p.get("tag", "")))
             hay_sin_tag = any(not p.get("tag", "") for p in preguntas)
             opciones_tags = tags_simulador + ([SIN_TAG] if hay_sin_tag else [])
@@ -1699,12 +1702,19 @@ elif pestana_seleccionada == "🎮 Simulador":
                 "📏 Seleccionar por rango ordinal",
                 value=False,
                 key="usar_rango",
-                help="Elige un tramo del banco por su número de orden (el 'N.º' que se ve en 'Ver Preguntas')"
+                help="Elige un tramo por orden de aparición (ej. las 5 primeras del tag), no por el #id"
             )
+
+            # Tamano del tramo elegible: manda el filtro de tags, no el banco entero.
+            preguntas_con_tag = [p for p in preguntas if coincide_tag(p, tags_seleccionados)]
 
             rango = None
             if usar_rango:
-                max_rango = max(len(preguntas), 1)
+                max_rango = max(len(preguntas_con_tag), 1)
+                st.caption(
+                    f"Contando sobre las **{len(preguntas_con_tag)}** preguntas del filtro actual, "
+                    "de arriba abajo tal como salen en 'Ver Preguntas'."
+                )
 
                 for clave in ("rango_inicio", "rango_fin"):
                     if clave in st.session_state:
@@ -1718,7 +1728,7 @@ elif pestana_seleccionada == "🎮 Simulador":
                         max_value=max_rango,
                         step=1,
                         key="rango_inicio",
-                        help="Número de orden inicial según 'Ver Preguntas' (no es el #id)"
+                        help="Orden dentro del filtro actual: 1 = la primera que aparece en 'Ver Preguntas' (no es el #id)"
                     )
                 with col_r2:
                     rango_fin = st.number_input(
@@ -1727,7 +1737,7 @@ elif pestana_seleccionada == "🎮 Simulador":
                         max_value=max_rango,
                         step=1,
                         key="rango_fin",
-                        help="Número de orden final según 'Ver Preguntas' (no es el #id)"
+                        help="Orden dentro del filtro actual, contando de arriba abajo (no es el #id)"
                     )
 
                 if rango_inicio > rango_fin:
@@ -1742,26 +1752,21 @@ elif pestana_seleccionada == "🎮 Simulador":
             if rango:
                 r_ini, r_fin = info_pool["rango"]
                 st.caption(
-                    f"📋 Rango **{r_ini}–{r_fin}** del banco "
-                    f"({info_pool['tras_rango']} preguntas) → tras filtrar por tags: "
-                    f"**{len(preguntas_disponibles)}** disponibles"
+                    f"📋 Preguntas **{r_ini}.ª a {r_fin}.ª** del filtro actual "
+                    f"(de {info_pool['total_filtrado']}) → **{len(preguntas_disponibles)}** disponibles"
                 )
                 if preguntas_disponibles:
                     ids_incluidos = [p.get("id") for p in preguntas_disponibles]
-                    st.caption(f"🆔 Incluye los ids: {', '.join(str(i) for i in ids_incluidos)}")
-                elif info_pool["tras_rango"] > 0:
-                    st.warning(
-                        "⚠️ Ninguna pregunta de ese tramo tiene los tags seleccionados. "
-                        "Amplía el rango o cambia los tags."
-                    )
+                    st.caption(f"🆔 Corresponden a los ids: {', '.join(str(i) for i in ids_incluidos)}")
             else:
                 st.caption(f"📋 Pool completo: **{len(preguntas_disponibles)}** preguntas")
 
             if info_pool["duplicados"]:
                 ids_dup = ", ".join(str(i) for i in info_pool["ids_duplicados"])
                 st.info(
-                    f"ℹ️ Se apartó **{info_pool['duplicados']}** pregunta(s) repetida(s) "
-                    f"del pool (id: {ids_dup}) para que no salgan dos veces."
+                    f"ℹ️ Ese tramo trae **{info_pool['duplicados']}** pregunta(s) repetida(s) "
+                    f"(id: {ids_dup}); se apartan para que no salgan dos veces. "
+                    "Bórralas en 'Ver Preguntas' para que el tramo cuadre."
                 )
 
             for grupo in info_pool["conflictos"]:

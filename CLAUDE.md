@@ -63,9 +63,11 @@ Exam mode sets `timer_activo` and uses `st_autorefresh(interval=1000)` for the c
 
 Pool selection goes through `seleccionar_pool()` and the order of operations is load-bearing:
 
-1. **Ordinal range is a position in the full bank** — the `N.º` shown in "Ver Preguntas", *not* the `#id`. Ids have gaps from deletions (in a real 186-question bank, 141 questions have `id != position`), so treating the two as interchangeable returns the wrong tramo. Applying the range after the tag filter shifts the numbering the same way — don't reorder these steps.
-2. Tag filter intersects with the range. `SIN_TAG` ("Sin tag") must stay in the options or untagged questions silently vanish from the simulator.
-3. Dedup runs **before** sampling, so the exam gets the requested count instead of a short one.
+1. **Tag filter first.** `SIN_TAG` ("Sin tag") must stay in the options or untagged questions silently vanish from the simulator.
+2. **Then the ordinal range, counted over that filtered list** — 1 is the first question shown in "Ver Preguntas" under the same tag filter, counting downward. It is a rank, *never* the `#id`: ids have gaps from deletions (in a real 186-question bank, 141 questions have `id != position`), so "the 5 first PaloAlto ones" may well be ids 81, 102, 103, 104, 105. Do not reorder these two steps — applying the range before the tag filter is what made ranges return an unrelated tramo.
+3. Dedup runs **last**, so the tramo is exactly the one visible in "Ver Preguntas". A tramo containing a duplicate therefore yields one question fewer; the UI says so rather than silently shipping the repeat.
+
+"Ver Preguntas" numbers each question with the same rank (`N.º`), computed over its tag filter but *not* its text search, so the two tabs always agree. Both tabs share `coincide_tag()` — keep it that way.
 
 Duplicate identity is `firma_pregunta()` = normalized text **+ normalized options** (order-independent), excluding `correctas`. Both halves matter: OCR produces same-question copies differing only in line breaks (missed by exact text comparison), while the bank also holds legitimately distinct questions that share an "Refer to the exhibits…" preamble and differ only in options (destroyed by text-only dedup). Excluding `correctas` is deliberate — same question + same options + different answer is a data error, surfaced via `detectar_conflictos()` rather than silently kept as two questions.
 
