@@ -16,9 +16,9 @@ env/
 *.swo
 *~
 
-# Build artifacts
+# Build artifacts (build/ NO se ignora: contiene los scripts de empaquetado,
+# no artefactos; lo que se genera va a dist/ e installer/)
 dist/
-build/
 installer/
 *.egg-info/
 
