@@ -107,14 +107,18 @@ def load_api_key() -> str | None:
 
 def delete_api_key() -> bool:
     """Elimina la API key guardada.
-    
-    Returns:
-        True si se elimino correctamente, False en caso contrario.
+
+    Borra tambien la keyfile de Fernet: solo sirve para (des)encriptar la
+    key que se esta borrando, y dejarla huerfana obligaria a generar otra
+    en el siguiente guardado.
     """
     try:
         config_path = os.path.join(_get_config_path(), CONFIG_FILE)
         if os.path.exists(config_path):
             os.remove(config_path)
+        key_path = os.path.join(_get_config_path(), KEY_FILE)
+        if os.path.exists(key_path):
+            os.remove(key_path)
         return True
     except Exception:
         return False

@@ -1,16 +1,13 @@
 import streamlit as st
-import numpy as np
 from PIL import Image
 import json
 import os
-import sys
 import time
 import random
 import copy
+import html
 import re
 import shutil
-import zipfile
-import io
 
 # Check for st.fragment support (Streamlit 1.54+)
 ST_FRAGMENT_AVAILABLE = hasattr(st, 'fragment')
@@ -19,6 +16,11 @@ from src.paths import get_app_dir, get_data_dir
 from src.api_key_manager import save_api_key, load_api_key, has_api_key
 from src.seleccion import (SIN_TAG, seleccionar_pool, deduplicar, detectar_conflictos,
                            coincide_tag)
+from src.preguntas import (prefijo_opcion, normalizar_opciones_ocr,
+                           validar_preguntas_importadas, reasignar_ids,
+                           purgar_imagenes_huerfanas)
+from src.examen import calcular_resultado
+from src.backup import export_questions_to_zip, import_questions_from_zip
 
 # ✅ CONFIGURACIÓN PROTEGIDA DE OPENCV
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "0"
@@ -29,14 +31,14 @@ try:
     import cv2
     cv2.setNumThreads(1)
     OPENCV_AVAILABLE = True
-except:
+except Exception:
     OPENCV_AVAILABLE = False
 
 try:
     from google import genai
     from google.genai import types
     GENAI_AVAILABLE = True
-except:
+except Exception:
     GENAI_AVAILABLE = False
 
 try:
@@ -642,65 +644,8 @@ def resolve_image_path(rel_path):
 
 
 # --- FUNCIONES EXPORT/IMPORT ZIP ---
-def export_questions_to_zip(preguntas, data_dir):
-    """
-    Exporta preguntas e imágenes a un archivo ZIP.
-    """
-    zip_buffer = io.BytesIO()
-    
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        preguntas_export = []
-        for p in preguntas:
-            p_exp = p.copy()
-            if p_exp.get("imagen"):
-                p_exp["imagen"] = get_relative_image_path(p_exp["imagen"])
-            preguntas_export.append(p_exp)
-        
-        json_data = json.dumps(preguntas_export, indent=4, ensure_ascii=False)
-        zip_file.writestr('preguntas.json', json_data)
-        
-        for p in preguntas:
-            if p.get("imagen"):
-                abs_path = resolve_image_path(p.get("imagen"))
-                if abs_path and os.path.exists(abs_path):
-                    img_filename = os.path.basename(abs_path)
-                    zip_file.write(abs_path, f'imagenes/{img_filename}')
-    
-    zip_buffer.seek(0)
-    return zip_buffer.getvalue()
-
-def import_questions_from_zip(zip_bytes, data_dir):
-    """
-    Importa preguntas e imágenes desde un archivo ZIP.
-    """
-    import tempfile
-    
-    preguntas_importadas = []
-    
-    with tempfile.TemporaryDirectory() as temp_dir:
-        with zipfile.ZipFile(io.BytesIO(zip_bytes), 'r') as zip_file:
-            zip_file.extractall(temp_dir)
-        
-        json_path = os.path.join(temp_dir, 'preguntas.json')
-        if not os.path.exists(json_path):
-            return {"error": "El ZIP no contiene preguntas.json"}
-        
-        with open(json_path, 'r', encoding='utf-8') as f:
-            preguntas_importadas = json.load(f)
-        
-        img_source_dir = os.path.join(temp_dir, 'imagenes')
-        if os.path.exists(img_source_dir):
-            for img_file in os.listdir(img_source_dir):
-                src_path = os.path.join(img_source_dir, img_file)
-                if os.path.isfile(src_path):
-                    dst_path = os.path.join(CARPETA_IMAGENES, img_file)
-                    shutil.copy2(src_path, dst_path)
-    
-    for p in preguntas_importadas:
-        if p.get("imagen"):
-            p["imagen"] = get_relative_image_path(p["imagen"])
-    
-    return preguntas_importadas
+# export_questions_to_zip / import_questions_from_zip viven en src/backup.py
+# (endurecidas: sin extractall, tope de tamaño anti zip-bomb).
 
 
 def _initialize_resources():
@@ -782,12 +727,26 @@ def load_questions():
     try:
         with open(ARCHIVO_JSON, "r", encoding="utf-8") as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except FileNotFoundError:
+        return []
+    except json.JSONDecodeError:
+        # JSON corrupto: se renombra a .corrupta_<timestamp> para que el
+        # siguiente guardado no lo machaque y el usuario pueda recuperarlo.
+        try:
+            os.replace(ARCHIVO_JSON, f"{ARCHIVO_JSON}.corrupta_{int(time.time())}")
+        except OSError:
+            pass
         return []
 
 def save_questions(preguntas_actualizadas):
-    with open(ARCHIVO_JSON, "w", encoding="utf-8") as f:
+    # Escritura atomica: se escribe en un .tmp y se renombra con os.replace,
+    # asi un cierre a mitad de guardado no deja el JSON a medias.
+    tmp_path = ARCHIVO_JSON + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(preguntas_actualizadas, f, indent=4, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_path, ARCHIVO_JSON)
     load_questions.clear()
 
 preguntas = load_questions()
@@ -805,17 +764,9 @@ def aleatorizar_pregunta(pregunta):
     # Extraer letras y textos de forma robusta usando regex
     pares_originales = []
     for opcion in opciones_originales:
-        # Match: "A) Texto", "A. Texto", "A - Texto", "A: Texto"
-        match = re.match(r"^([A-Fa-f])\s*[\).\-:]\s*(.*)", opcion)
-        if match:
-            letra_original = match.group(1).upper()
-            texto = match.group(2).strip()
-        else:
-            # Fallback: usar el texto completo si no hay formato estándar
-            continue
-        
-        if texto:
-            pares_originales.append((letra_original, texto))
+        par = prefijo_opcion(opcion)
+        if par:
+            pares_originales.append(par)
     
     if not pares_originales:
         return pregunta_aleatoria
@@ -1125,10 +1076,11 @@ if pestana_seleccionada == opciones_pestanas[0]:
                         save_questions(preguntas_actuales)
                     
                     st.success(f"✅ ¡Pregunta #{nuevo_id} guardada!")
-                    st.balloons()
-                    
+                    # El toast sobrevive al rerun inmediato (los balloons no),
+                    # y sin sleep(1) el guardado no bloquea el servidor.
+                    st.toast("✅ Pregunta guardada!", icon="🎉")
+
                     limpiar_formulario_manual()
-                    time.sleep(1)
                     st.rerun()
 
 # ========================================
@@ -1214,7 +1166,9 @@ elif pestana_seleccionada == "📸 Extracción OCR":
                 with st.expander("🔍 Ver tamaño completo"):
                     st.image(uploaded_file, use_container_width=True)
             
-            temp_path = "temp_capture_ocr.png"
+            # Temporal en el data dir (nunca en el CWD: en el .exe empaquetado
+            # puede ser Program Files, que no es escribible).
+            temp_path = os.path.join(DATA_DIR, "temp_capture_ocr.png")
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             
@@ -1257,13 +1211,11 @@ elif pestana_seleccionada == "📸 Extracción OCR":
                     st.markdown("**Opciones de respuesta:**")
                     st.caption("✏️ Edita si es necesario y ✅ marca las correctas")
                     
-                    respuestas = resultado_texto.get("respuestas", [])
+                    respuestas = normalizar_opciones_ocr(resultado_texto.get("respuestas", []))
                     opciones_guardadas = []
                     correctas_marcadas = []
                     
-                    for idx, opcion in enumerate(respuestas):
-                        letra = opcion[0] if opcion else chr(65 + idx)
-                        texto_opcion = opcion[3:].strip() if len(opcion) > 3 else opcion
+                    for idx, (letra, texto_opcion) in enumerate(respuestas):
                         
                         col_opt, col_check = st.columns([5, 1])
                         
@@ -1339,14 +1291,12 @@ elif pestana_seleccionada == "📸 Extracción OCR":
                                     save_questions(preguntas_actuales)
                                 
                                 st.success(f"🎉 ¡Pregunta #{nuevo_id} guardada!")
-                                st.balloons()
                                 st.toast("✅ Pregunta guardada exitosamente!", icon="🎉")
-                                
+
                                 del st.session_state.resultado_ocr
                                 if os.path.exists(temp_path):
                                     os.remove(temp_path)
-                                
-                                time.sleep(1)
+
                                 st.rerun()
                     
                     with col_cancel:
@@ -1384,38 +1334,51 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
 
         if archivo_importar is not None:
             es_zip = archivo_importar.name.endswith('.zip')
+            contenido = None
 
             try:
                 if es_zip:
                     contenido = import_questions_from_zip(archivo_importar.getvalue(), DATA_DIR)
+                    if isinstance(contenido, dict) and "error" in contenido:
+                        st.error(f"❌ {contenido['error']}")
+                        contenido = None
                 else:
                     contenido = json.load(archivo_importar)
-                
-                if isinstance(contenido, list) and len(contenido) > 0:
-                    if all(isinstance(p, dict) and "pregunta" in p and "opciones" in p for p in contenido):
-                        st.success(f"✅ Archivo válido: {len(contenido)} preguntas detectadas")
-                        
-                        with st.expander("👀 Vista previa de las preguntas"):
-                            for i, p in enumerate(contenido[:5]):
-                                st.markdown(f"**{i+1}.** {p['pregunta'][:80]}...")
-                            if len(contenido) > 5:
-                                st.caption(f"... y {len(contenido) - 5} preguntas más")
-                        
-                        if st.button("✅ Importar todas las preguntas", type="primary"):
-                            with st.spinner("📥 Importando..."):
-                                save_questions(contenido)
-                            st.success(f"🎉 ¡{len(contenido)} preguntas importadas!")
-                            st.toast("✅ Importación exitosa!", icon="🎉")
-                            time.sleep(1)
-                            st.rerun()
-                    else:
-                        st.error("❌ El archivo no tiene el formato correcto")
-                else:
-                    st.error("❌ El archivo está vacío")
             except json.JSONDecodeError:
                 st.error("❌ El archivo no es un JSON válido")
+                contenido = None
             except Exception as e:
                 st.error(f"❌ Error al importar: {str(e)}")
+                contenido = None
+
+            if contenido is not None and not (isinstance(contenido, list) and contenido):
+                st.error("❌ El archivo está vacío o no contiene una lista de preguntas")
+            elif contenido:
+                preguntas_validas, errores_import = validar_preguntas_importadas(contenido)
+
+                if errores_import:
+                    with st.expander(f"⚠️ {len(errores_import)} entrada(s) inválidas (se ignorarán)"):
+                        for err in errores_import:
+                            st.markdown(f"- {err}")
+
+                if preguntas_validas:
+                    st.success(f"✅ Archivo válido: {len(preguntas_validas)} preguntas detectadas")
+
+                    with st.expander("👀 Vista previa de las preguntas"):
+                        for i, p in enumerate(preguntas_validas[:5]):
+                            st.markdown(f"**{i+1}.** {p['pregunta'][:80]}...")
+                        if len(preguntas_validas) > 5:
+                            st.caption(f"... y {len(preguntas_validas) - 5} preguntas más")
+
+                    if st.button("✅ Importar todas las preguntas", type="primary"):
+                        with st.spinner("📥 Importando..."):
+                            reasignar_ids(preguntas_validas)
+                            save_questions(preguntas_validas)
+                        st.success(f"🎉 ¡{len(preguntas_validas)} preguntas importadas!")
+                        st.toast("✅ Importación exitosa!", icon="🎉")
+                        st.rerun()
+                else:
+                    st.error("❌ Ninguna pregunta del archivo pasa la validación")
 
     else:
         st.success(f"✅ {len(preguntas)} pregunta(s) guardada(s)")
@@ -1472,14 +1435,29 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
             
             with col_exp:
                 st.markdown("**📤 Exportar (ZIP)**")
-                zip_data = export_questions_to_zip(preguntas, DATA_DIR)
-                st.download_button(
-                    label="⬇️ Descargar ZIP",
-                    data=zip_data,
-                    file_name=f"preguntas_backup_{int(time.time())}.zip",
-                    mime="application/zip",
-                    use_container_width=True
-                )
+                # El ZIP solo se construye al pulsar el botón: empaquetar el
+                # banco (JSON + todas las imágenes) en cada rerun era coste
+                # inútil. Se invalida solo si el banco cambió en disco (mtime).
+                huella_banco = (f"{len(preguntas)}_"
+                                f"{int(os.path.getmtime(ARCHIVO_JSON)) if os.path.exists(ARCHIVO_JSON) else 0}")
+                if st.session_state.get("zip_export_huella") != huella_banco:
+                    st.session_state.zip_export_data = None
+
+                if st.button("📦 Generar backup ZIP", key="gen_zip"):
+                    with st.spinner("📦 Empaquetando..."):
+                        st.session_state.zip_export_data = export_questions_to_zip(preguntas, DATA_DIR)
+                        st.session_state.zip_export_huella = huella_banco
+                    st.toast("📦 Backup listo para descargar", icon="📦")
+
+                zip_data = st.session_state.get("zip_export_data")
+                if zip_data:
+                    st.download_button(
+                        label="⬇️ Descargar ZIP",
+                        data=zip_data,
+                        file_name=f"preguntas_backup_{int(time.time())}.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
             
             with col_imp:
                 st.markdown("**📥 Importar**")
@@ -1504,47 +1482,60 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
                 st.error(f"Error al leer archivo: {str(e)}")
                 contenido = None
             
-            if contenido and isinstance(contenido, list) and len(contenido) > 0:
-                if all(isinstance(p, dict) and "pregunta" in p and "opciones" in p for p in contenido):
-                    st.success(f"✅ Archivo válido: {len(contenido)} preguntas")
-                    
+            if contenido is not None and not (isinstance(contenido, list) and contenido):
+                st.error("❌ El archivo está vacío o no contiene una lista de preguntas")
+            elif contenido:
+                preguntas_validas, errores_import = validar_preguntas_importadas(contenido)
+
+                if errores_import:
+                    with st.expander(f"⚠️ {len(errores_import)} entrada(s) inválidas (se ignorarán)"):
+                        for err in errores_import:
+                            st.markdown(f"- {err}")
+
+                if preguntas_validas:
+                    st.success(f"✅ Archivo válido: {len(preguntas_validas)} preguntas")
+
                     col_merge, col_replace = st.columns(2)
-                    
+
                     with col_merge:
                         if st.button("➕ Añadir", use_container_width=True):
                             with st.spinner("📥 Añadiendo..."):
                                 max_id = max((p.get("id", 0) for p in preguntas), default=0)
-                                for idx, p_nueva in enumerate(contenido):
+                                for idx, p_nueva in enumerate(preguntas_validas):
                                     p_nueva["id"] = max_id + idx + 1
-                                preguntas.extend(contenido)
+                                preguntas.extend(preguntas_validas)
                                 save_questions(preguntas)
-                            st.toast(f"✅ {len(contenido)} preguntas añadidas!", icon="✅")
-                            time.sleep(1)
+                            st.toast(f"✅ {len(preguntas_validas)} preguntas añadidas!", icon="✅")
                             st.rerun()
-                    
+
                     with col_replace:
                         if st.button("🔄 Reemplazar", type="secondary", use_container_width=True):
                             st.session_state.confirmar_reemplazo = True
-                    
+
                     if st.session_state.get("confirmar_reemplazo", False):
                         st.warning("⚠️ Esto borrará todas las preguntas actuales")
                         col1, col2 = st.columns(2)
-                        
+
                         with col1:
                             if st.button("✅ Confirmar", type="primary"):
                                 with st.spinner("🔄 Reemplazando..."):
-                                    save_questions(contenido)
+                                    reasignar_ids(preguntas_validas)
+                                    save_questions(preguntas_validas)
+                                # Las imágenes del banco anterior quedan
+                                # huérfanas: se purgan contra el banco recién
+                                # guardado (las del ZIP importado están
+                                # referenciadas y sobreviven).
+                                purgar_imagenes_huerfanas(CARPETA_IMAGENES, preguntas_validas)
                                 st.session_state.confirmar_reemplazo = False
                                 st.toast("✅ Base de datos reemplazada!", icon="🔄")
-                                time.sleep(1)
                                 st.rerun()
-                        
+
                         with col2:
                             if st.button("❌ Cancelar"):
                                 st.session_state.confirmar_reemplazo = False
                                 st.rerun()
-            elif contenido:
-                st.error("❌ Formato de archivo inválido")
+                else:
+                    st.error("❌ Ninguna pregunta del archivo pasa la validación")
         
         st.markdown("---")
 
@@ -1561,6 +1552,7 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
                     if st.button("✅ Confirmar Eliminación", type="primary", use_container_width=True):
                         preguntas.clear()
                         save_questions(preguntas)
+                        purgar_imagenes_huerfanas(CARPETA_IMAGENES, preguntas)
                         st.toast("🗑️ Todas las preguntas eliminadas")
                         st.session_state.mostrar_confirmar_eliminar_todas = False
                         st.rerun()
@@ -1639,8 +1631,14 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
                         st.markdown(f"- {opt}")
                 
                 if st.button(f"🗑️ Eliminar", key=f"del_{q['id']}"):
+                    # La purga se limita a la imagen de ESTA pregunta: borrar
+                    # una pregunta no debe arrastrar huérfanas antiguas.
+                    img_borrada = os.path.basename(q["imagen"]) if q.get("imagen") else None
                     preguntas.remove(q)
                     save_questions(preguntas)
+                    if img_borrada:
+                        purgar_imagenes_huerfanas(
+                            CARPETA_IMAGENES, preguntas, limitar_a={img_borrada})
                     st.toast("✅ Pregunta eliminada", icon="🗑️")
                     st.rerun()
 
@@ -1861,20 +1859,36 @@ elif pestana_seleccionada == "🎮 Simulador":
         # ========================================
         elif st.session_state.mostrar_resultados:
             res = st.session_state.resultado_final
+            if res is None:
+                res = calcular_resultado(
+                    st.session_state.preguntas_simulador,
+                    st.session_state.respuestas_usuario,
+                    contar_no_respondidas_como_incorrectas=st.session_state.get("timer_activo", False),
+                )
+                st.session_state.resultado_final = res
             
             st.markdown("## 🎯 Resultados del Examen")
             st.markdown('<div id="reporte-topo"></div>', unsafe_allow_html=True)
             
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
+            # La métrica de no respondidas solo ocupa columna si hay alguna
+            # (en modo examen son 0: cuentan como incorrectas).
+            hay_no_respondidas = res['no_respondidas'] > 0
+            cols_metricas = st.columns(5 if hay_no_respondidas else 4)
+
+            with cols_metricas[0]:
                 st.metric("✅ Correctas", res['correctas'], delta=f"{res['correctas']}/{res['total']}")
-            with col2:
+            with cols_metricas[1]:
                 st.metric("🟡 Parciales", res['parciales'])
-            with col3:
+            with cols_metricas[2]:
                 st.metric("❌ Incorrectas", res['incorrectas'])
-            with col4:
-                st.metric("📊 Puntuación", f"{res['porcentaje']:.0f}%")
+            if hay_no_respondidas:
+                with cols_metricas[3]:
+                    st.metric("⬜ No respondidas", res['no_respondidas'])
+                with cols_metricas[4]:
+                    st.metric("📊 Puntuación", f"{res['porcentaje']:.0f}%")
+            else:
+                with cols_metricas[3]:
+                    st.metric("📊 Puntuación", f"{res['porcentaje']:.0f}%")
             
             if res['porcentaje'] >= 80:
                 st.success("🎉 ¡Excelente! Has aprobado con nota alta")
@@ -1941,23 +1955,26 @@ elif pestana_seleccionada == "🎮 Simulador":
                     
                     st.markdown(f'<div id="pregunta-{idx_orig}"></div>', unsafe_allow_html=True)
                     st.markdown("---")
+                    # El id viene del banco importado: se escapa porque estas
+                    # cabeceras usan unsafe_allow_html (XSS si viene malicioso).
+                    id_html = html.escape(str(preg.get('id', '?')))
                     
                     if estado == "correcta":
                         st.markdown(f"""
                         <div style='background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 16px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);'>
-                            <h3 style='margin: 0; font-size: 20px;'>✅ Pregunta {idx_orig + 1} - CORRECTA <span style='font-size:14px;font-weight:500;opacity:0.75;'>(#{preg.get('id','?')})</span></h3>
+                            <h3 style='margin: 0; font-size: 20px;'>✅ Pregunta {idx_orig + 1} - CORRECTA <span style='font-size:14px;font-weight:500;opacity:0.75;'>(#{id_html})</span></h3>
                         </div>
                         """, unsafe_allow_html=True)
                     elif estado == "parcial":
                         st.markdown(f"""
                         <div style='background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 16px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);'>
-                            <h3 style='margin: 0; font-size: 20px;'>🟡 Pregunta {idx_orig + 1} - PARCIAL <span style='font-size:14px;font-weight:500;opacity:0.75;'>(#{preg.get('id','?')})</span></h3>
+                            <h3 style='margin: 0; font-size: 20px;'>🟡 Pregunta {idx_orig + 1} - PARCIAL <span style='font-size:14px;font-weight:500;opacity:0.75;'>(#{id_html})</span></h3>
                         </div>
                         """, unsafe_allow_html=True)
                     else:
                         st.markdown(f"""
                         <div style='background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 16px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);'>
-                            <h3 style='margin: 0; font-size: 20px;'>❌ Pregunta {idx_orig + 1} - INCORRECTA <span style='font-size:14px;font-weight:500;opacity:0.75;'>(#{preg.get('id','?')})</span></h3>
+                            <h3 style='margin: 0; font-size: 20px;'>❌ Pregunta {idx_orig + 1} - INCORRECTA <span style='font-size:14px;font-weight:500;opacity:0.75;'>(#{id_html})</span></h3>
                         </div>
                         """, unsafe_allow_html=True)
                     
@@ -1980,6 +1997,10 @@ elif pestana_seleccionada == "🎮 Simulador":
                         for opcion in preg["opciones"]:
                             letra = opcion[0]
                             texto = opcion[3:].strip() if len(opcion) > 3 else opcion
+                            # Escapado obligatorio: el texto viene del banco
+                            # (importable por JSON/ZIP) y va inline en HTML.
+                            letra_html = html.escape(letra)
+                            texto_html = html.escape(texto)
                             
                             bg_correcta = "#d1fae5"
                             color_correcta = "#065f46"
@@ -1994,21 +2015,21 @@ elif pestana_seleccionada == "🎮 Simulador":
                             if letra in preg["correctas"]:
                                 st.markdown(f"""
                                 <div style='background: {bg_correcta}; border-left: 4px solid {border_correcta}; padding: 12px; margin-bottom: 8px; border-radius: 6px;'>
-                                    <strong style='color: {color_correcta};'>{letra}) {texto}</strong>
+                                    <strong style='color: {color_correcta};'>{letra_html}) {texto_html}</strong>
                                     <span style='color: {color_correcta}; font-weight: 600;'> ← ✅ CORRECTA</span>
                                 </div>
                                 """, unsafe_allow_html=True)
                             elif letra in resp_usuario:
                                 st.markdown(f"""
                                 <div style='background: {bg_incorrecta}; border-left: 4px solid {border_incorrecta}; padding: 12px; margin-bottom: 8px; border-radius: 6px;'>
-                                    <span style='color: {color_incorrecta};'>{letra}) {texto}</span>
+                                    <span style='color: {color_incorrecta};'>{letra_html}) {texto_html}</span>
                                     <span style='color: {color_incorrecta}; font-weight: 600;'> ← ❌ Tu respuesta</span>
                                 </div>
                                 """, unsafe_allow_html=True)
                             else:
                                 st.markdown(f"""
                                 <div style='background: {bg_default}; border-left: 4px solid {border_default}; padding: 12px; margin-bottom: 8px; border-radius: 6px;'>
-                                    <span style='color: {color_default};'>{letra}) {texto}</span>
+                                    <span style='color: {color_default};'>{letra_html}) {texto_html}</span>
                                 </div>
                                 """, unsafe_allow_html=True)
                     
@@ -2105,91 +2126,116 @@ elif pestana_seleccionada == "🎮 Simulador":
             preg = st.session_state.preguntas_simulador[idx]
             total = len(st.session_state.preguntas_simulador)
             
-            # === TIMER EN TIEMPO REAL CON STREAMLIT AUTOREFREASH ===
+            # === TIMER EN TIEMPO REAL ===
+            # Con st.fragment (Streamlit 1.54+) solo este bloque se re-ejecuta
+            # cada segundo; sin fragment, el fallback es st_autorefresh (o
+            # sleep+rerun), que re-ejecuta la pagina entera.
             if st.session_state.get("timer_activo", False):
-                tiempo_inicio_timer = st.session_state.tiempo_inicio
-                tiempo_limite_timer = st.session_state.tiempo_limite
-                
-                tiempo_transcurrido = time.time() - tiempo_inicio_timer
-                tiempo_restante = tiempo_limite_timer - tiempo_transcurrido
-                
-                if tiempo_restante <= 0:
-                    st.error("⏰ ¡Tiempo agotado!")
-                    st.session_state.mostrar_resultados = True
-                    st.rerun()
-                
-                minutos = int(tiempo_restante // 60)
-                segundos = int(tiempo_restante % 60)
-                
-                # Usar Streamlit autoRefresh cada segundo (importado al inicio del archivo)
-                if STREAMLIT_AUTOREFRESH_AVAILABLE:
-                    st_autorefresh(interval=1000, limit=None, key="timer_refresh")
-                else:
-                    # Fallback: Force rerun con st.empty si no hay autorefresh
-                    st.warning("⚠️ Instala streamlit-autorefresh para timer fluido: pip install streamlit-autorefresh")
-                    time.sleep(1)
-                    st.rerun()
-                
-                # Determinar color según el tiempo restante
-                if tiempo_restante < 60:
-                    timer_color = "#ef4444"
-                    timer_bg = "#fef2f2"
-                    timer_border = "#dc2626"
-                elif tiempo_restante < 300:
-                    timer_color = "#f59e0b"
-                    timer_bg = "#fffbeb"
-                    timer_border = "#d97706"
-                else:
-                    timer_color = "#059669"
-                    timer_bg = "#f0fdf4"
-                    timer_border = "#047857"
-                
-                st.markdown(f"""
-                <div style="
-                    background: {timer_bg};
-                    border: 4px solid {timer_border};
-                    border-radius: 16px;
-                    padding: 24px;
-                    margin: 10px 0;
-                    text-align: center;
-                    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-                ">
-                    <div style="font-size: 18px; color: #6b7280; font-weight: 700; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 3px;">
-                        ⏱️ TIEMPO RESTANTE
-                    </div>
+
+                def _cuerpo_timer(idx_q, total_q):
+                    tiempo_inicio_timer = st.session_state.tiempo_inicio
+                    tiempo_limite_timer = st.session_state.tiempo_limite
+
+                    tiempo_transcurrido = time.time() - tiempo_inicio_timer
+                    tiempo_restante = tiempo_limite_timer - tiempo_transcurrido
+
+                    if tiempo_restante <= 0:
+                        st.error("⏰ ¡Tiempo agotado!")
+                        st.session_state.resultado_final = calcular_resultado(
+                            st.session_state.preguntas_simulador,
+                            st.session_state.respuestas_usuario,
+                            contar_no_respondidas_como_incorrectas=True,
+                        )
+                        st.session_state.mostrar_resultados = True
+                        # scope="app": hay que salir de la pantalla de examen
+                        # entera, no solo del fragmento del timer.
+                        if ST_FRAGMENT_AVAILABLE:
+                            st.rerun(scope="app")
+                        st.rerun()
+
+                    minutos = int(tiempo_restante // 60)
+                    segundos = int(tiempo_restante % 60)
+
+                    # Determinar color según el tiempo restante
+                    if tiempo_restante < 60:
+                        timer_color = "#ef4444"
+                        timer_bg = "#fef2f2"
+                        timer_border = "#dc2626"
+                    elif tiempo_restante < 300:
+                        timer_color = "#f59e0b"
+                        timer_bg = "#fffbeb"
+                        timer_border = "#d97706"
+                    else:
+                        timer_color = "#059669"
+                        timer_bg = "#f0fdf4"
+                        timer_border = "#047857"
+
+                    st.markdown(f"""
                     <div style="
-                        font-size: 72px;
-                        font-weight: 900;
-                        color: {timer_color};
-                        font-family: 'Courier New', monospace;
-                        letter-spacing: 8px;
-                        text-shadow: 3px 3px 6px rgba(0,0,0,0.2);
+                        background: {timer_bg};
+                        border: 4px solid {timer_border};
+                        border-radius: 16px;
+                        padding: 24px;
+                        margin: 10px 0;
+                        text-align: center;
+                        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
                     ">
-                        {minutos:02d}:{segundos:02d}
-                    </div>
-                    <div style="
-                        background: #e5e7eb;
-                        border-radius: 12px;
-                        height: 16px;
-                        margin-top: 20px;
-                        overflow: hidden;
-                    ">
+                        <div style="font-size: 18px; color: #6b7280; font-weight: 700; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 3px;">
+                            ⏱️ TIEMPO RESTANTE
+                        </div>
                         <div style="
-                            background: {timer_color};
-                            height: 100%;
-                            width: {(tiempo_restante / tiempo_limite_timer) * 100}%;
+                            font-size: 72px;
+                            font-weight: 900;
+                            color: {timer_color};
+                            font-family: 'Courier New', monospace;
+                            letter-spacing: 8px;
+                            text-shadow: 3px 3px 6px rgba(0,0,0,0.2);
+                        ">
+                            {minutos:02d}:{segundos:02d}
+                        </div>
+                        <div style="
+                            background: #e5e7eb;
                             border-radius: 12px;
-                            transition: width 1s linear;
-                        "></div>
+                            height: 16px;
+                            margin-top: 20px;
+                            overflow: hidden;
+                        ">
+                            <div style="
+                                background: {timer_color};
+                                height: 100%;
+                                width: {(tiempo_restante / tiempo_limite_timer) * 100}%;
+                                border-radius: 12px;
+                                transition: width 1s linear;
+                            "></div>
+                        </div>
+                        <div style="margin-top: 12px; font-size: 14px; color: #6b7280;">
+                            Pregunta {idx_q + 1} de {total_q}
+                        </div>
                     </div>
-                    <div style="margin-top: 12px; font-size: 14px; color: #6b7280;">
-                        Pregunta {idx + 1} de {total}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                if tiempo_restante < 60:
-                    st.warning(f"⚠️ ¡Solo quedan {int(tiempo_restante)} segundos!")
+                    """, unsafe_allow_html=True)
+
+                    if tiempo_restante < 60:
+                        st.warning(f"⚠️ ¡Solo quedan {int(tiempo_restante)} segundos!")
+
+                if ST_FRAGMENT_AVAILABLE:
+                    @st.fragment(run_every=1)
+                    def bloque_timer(idx_q, total_q):
+                        _cuerpo_timer(idx_q, total_q)
+
+                    bloque_timer(idx, total)
+                else:
+                    def bloque_timer(idx_q, total_q):
+                        _cuerpo_timer(idx_q, total_q)
+                        # Refresco de pagina completa: autorefresh si está, o
+                        # sleep+rerun como ultimo recurso.
+                        if STREAMLIT_AUTOREFRESH_AVAILABLE:
+                            st_autorefresh(interval=1000, limit=None, key="timer_refresh")
+                        else:
+                            st.warning("⚠️ Instala streamlit-autorefresh para timer fluido: pip install streamlit-autorefresh")
+                            time.sleep(1)
+                            st.rerun()
+
+                    bloque_timer(idx, total)
             else:
                 st.progress((idx + 1) / total, text=f"📍 Pregunta {idx + 1} de {total}")
             
@@ -2415,43 +2461,10 @@ elif pestana_seleccionada == "🎮 Simulador":
                 else:
                     if st.button("🏁 Finalizar", type="primary", use_container_width=True):
                         with st.spinner("📊 Calculando tus resultados finales..."):
-                            correctas = 0
-                            parciales = 0
-                            incorrectas = 0
-                            no_respondidas = 0
-                            
-                            for i, p in enumerate(st.session_state.preguntas_simulador):
-                                resp = st.session_state.respuestas_usuario.get(i, [])
-                                if not isinstance(resp, list):
-                                    resp = [resp] if resp else []
-                                
-                                # Verificar si fue respondida
-                                if not resp:
-                                    no_respondidas += 1
-                                    continue
-                                
-                                correctas_p = set(p["correctas"])
-                                respuestas_s = set(resp)
-                                
-                                if respuestas_s == correctas_p:
-                                    correctas += 1
-                                elif respuestas_s.intersection(correctas_p):
-                                    parciales += 1
-                                else:
-                                    incorrectas += 1
-                            
-                            # Las no respondidas se cuentan como incorrectas
-                            if no_respondidas > 0 and st.session_state.get("timer_activo", False):
-                                incorrectas += no_respondidas
-                                no_respondidas = 0
-                            
-                            st.session_state.resultado_final = {
-                                "correctas": correctas,
-                                "parciales": parciales,
-                                "incorrectas": incorrectas,
-                                "no_respondidas": no_respondidas,
-                                "total": total,
-                                "porcentaje": (correctas / total) * 100
-                            }
+                            st.session_state.resultado_final = calcular_resultado(
+                                st.session_state.preguntas_simulador,
+                                st.session_state.respuestas_usuario,
+                                contar_no_respondidas_como_incorrectas=st.session_state.get("timer_activo", False),
+                            )
                             st.session_state.mostrar_resultados = True
                         st.rerun()

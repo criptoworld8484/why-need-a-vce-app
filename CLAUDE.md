@@ -17,7 +17,7 @@ build\build_windows.bat                                # same, Windows
 build_installer.bat                                    # Inno Setup installer (setup.iss)
 ```
 
-There is no test suite, linter, or CI checked in. For anything in `src/`, write a plain-Python script and run it directly. To exercise the Streamlit UI headlessly (widgets, reruns, session state) use `streamlit.testing.v1.AppTest` — `AppTest.from_file("app.py")`, seed `session_state["config_completed"] = True` to skip the API-key setup screen, then drive `at.radio[0]`, `at.checkbox(key=...)`, `at.button[...]` and assert on `at.exception`. This runs the real script, unlike hitting the HTTP port, which only serves the static shell.
+Tests are plain-Python scripts run directly (no pytest/CI): `python tests_seleccion.py` (pool selection), `python tests_fase1.py` (scoring, option parsing, import validation), `python tests_fase1_app.py` (AppTest), `python tests_fase2.py` (ZIP import/export hardening, api key manager), `python tests_fase2_app.py` (AppTest: corrupt JSON backup), `python tests_fase3_app.py` (AppTest: full simulator flow, on-demand ZIP export), `python tests_fase4.py` (image orphan purge), `python tests_fase4_app.py` (AppTest: delete-question purge, unanswered metric). For anything new in `src/`, follow that pattern. To exercise the Streamlit UI headlessly (widgets, reruns, session state) use `streamlit.testing.v1.AppTest` — `AppTest.from_file("app.py")`, seed `session_state["config_completed"] = True` to skip the API-key setup screen, then drive `at.radio[0]`, `at.checkbox(key=...)`, `at.button[...]` and assert on `at.exception`. This runs the real script, unlike hitting the HTTP port, which only serves the static shell. Note: `at.session_state` does not support `.get()` — index with `[]` and catch `KeyError`.
 
 Note: both build scripts copy `preguntas.json` and `imagenes_preguntas/` from the **repo root** and fail verification if absent — those are user data that live in the data dir at runtime, so create/seed them at the root before packaging.
 
@@ -29,6 +29,9 @@ Note: both build scripts copy `preguntas.json` and `imagenes_preguntas/` from th
 - `src/paths.py` — the app-dir vs data-dir split (see below), PyInstaller-`frozen`-aware.
 - `src/api_key_manager.py` — Gemini API key encrypted at rest with Fernet in the config dir; degrades to no-op if `cryptography` is missing.
 - `src/seleccion.py` — pure (Streamlit-free) exam pool selection: ordinal range, tag filter, duplicate detection. Kept importable so it can be unit-tested without a Streamlit session.
+- `src/preguntas.py` — pure question-schema helpers: `prefijo_opcion()` (option-prefix regex, DOTALL so multiline options survive), `normalizar_opciones_ocr()` (reletters OCR options A–F without assuming a prefix), `validar_preguntas_importadas()` (imports are rejected unless `correctas` is a valid letter list matching the options), `reasignar_ids()` (consecutive ids on import/replace — duplicate ids collide in widget keys) and `purgar_imagenes_huerfanas()` (deletes unreferenced image files; `limitar_a` scopes the purge to given basenames so deleting one question never drags old orphans — full purges only on "Eliminar Todas"/"Reemplazar").
+- `src/examen.py` — `calcular_resultado()`, the single source of exam scoring shared by the "Finalizar" button and the timer timeout (the timeout used to skip it and crash the results screen).
+- `src/backup.py` — ZIP export/import. Hardened: never `extractall()` (only reads `preguntas.json` and `imagenes/*` members), decompressed-size caps against zip bombs (`LIMITE_TOTAL_BYTES`/`LIMITE_ARCHIVO_BYTES`, module constants so tests can lower them), and writes images via `os.path.basename()` so no member can escape the images dir.
 
 ### App dir vs data dir (important)
 
@@ -47,7 +50,7 @@ Image paths are stored **relative** to the data dir in JSON (`get_relative_image
 
 ### Persistence
 
-`load_questions()` is `@st.cache_data(ttl=10)`; `save_questions()` writes the full JSON and then calls `load_questions.clear()`. Any code path that mutates questions must go through `save_questions` or the cache will serve stale data for up to 10s.
+`load_questions()` is `@st.cache_data(ttl=10)`; `save_questions()` writes the full JSON atomically (`.tmp` + `os.replace`) and then calls `load_questions.clear()`. A corrupt `preguntas.json` is renamed to `preguntas.json.corrupta_<ts>` instead of being silently overwritten. Any code path that mutates questions must go through `save_questions` or the cache will serve stale data for up to 10s.
 
 ### Optional dependencies
 
@@ -59,7 +62,9 @@ Image paths are stored **relative** to the data dir in JSON (`get_relative_image
 
 ### Simulator / timer
 
-Exam mode sets `timer_activo` and uses `st_autorefresh(interval=1000)` for the countdown; the no-package fallback is `time.sleep(1)` + `st.rerun()`. Relevant session keys: `preguntas_simulador`, `indice_actual`, `respuestas_usuario`, `mostrar_resultados`, `resultado_final`, `tiempo_inicio`, `tiempo_limite`.
+Exam mode sets `timer_activo` and renders the countdown inside a `@st.fragment(run_every=1)` block (gated on `ST_FRAGMENT_AVAILABLE`), so only the timer re-runs each second instead of the whole page. The fragment's timeout path must call `st.rerun(scope="app")` to leave the exam screen. Without fragment support, the fallback is `st_autorefresh(interval=1000)` (full-page rerun), and the no-package fallback is `time.sleep(1)` + `st.rerun()`. Relevant session keys: `preguntas_simulador`, `indice_actual`, `respuestas_usuario`, `mostrar_resultados`, `resultado_final`, `tiempo_inicio`, `tiempo_limite`.
+
+The export ZIP in "Ver Preguntas" is built **on demand**: the "Generar backup ZIP" button stores the bytes in `st.session_state.zip_export_data` (invalidated by a `len(preguntas)`+mtime fingerprint of `preguntas.json`), because packing JSON plus every image on each rerun was pure waste. Post-save feedback uses `st.toast` (survives reruns); avoid reintroducing `time.sleep(1)` before `st.rerun()` — it blocks the server and balloons don't survive the rerun anyway.
 
 Pool selection goes through `seleccionar_pool()` and the order of operations is load-bearing:
 
