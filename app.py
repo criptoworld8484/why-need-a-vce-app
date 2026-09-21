@@ -16,7 +16,8 @@ from src.paths import get_app_dir, get_data_dir
 from src.api_key_manager import save_api_key, load_api_key, has_api_key
 from src.seleccion import (SIN_TAG, seleccionar_pool, deduplicar, detectar_conflictos,
                            coincide_tag)
-from src.preguntas import (prefijo_opcion, normalizar_opciones_ocr,
+from src.preguntas import (LETRAS_OPCIONES, prefijo_opcion,
+                           letra_por_posicion, normalizar_opciones_ocr,
                            validar_preguntas_importadas, reasignar_ids,
                            purgar_imagenes_huerfanas)
 from src.examen import calcular_resultado
@@ -922,6 +923,20 @@ def limpiar_formulario_manual():
         st.session_state[f"manual_texto_{letra}"] = ""
         st.session_state[f"manual_corr_{letra}"] = False
 
+# --- FUNCIÓN PARA CERRAR EL EDITOR DE UNA PREGUNTA ---
+def cerrar_editor_pregunta(qid):
+    """Borra de session_state las claves del editor de la pregunta qid.
+
+    Sin esto, cancelar y reabrir el editor mostraría los textos de la
+    sesion de edicion anterior: session_state conserva el valor de los
+    widgets aunque el formulario ya no exista.
+    """
+    st.session_state.pop(f"editando_{qid}", None)
+    st.session_state.pop(f"edit_enun_{qid}", None)
+    for letra in LETRAS_OPCIONES:
+        st.session_state.pop(f"edit_texto_{letra}_{qid}", None)
+        st.session_state.pop(f"edit_corr_{letra}_{qid}", None)
+
 # --- PESTAÑAS PRINCIPALES CON ESTADO ---
 opciones_pestanas = ["✍️ Ingesta Manual", "📸 Extracción OCR", "📊 Ver Preguntas", "🎮 Simulador"]
 
@@ -1614,33 +1629,133 @@ elif pestana_seleccionada == "📊 Ver Preguntas":
                 
                 st.markdown("---")
                 
-                st.markdown(f"**{p_mostrar['pregunta']}**")
-                
-                imagen_path = resolve_image_path(p_mostrar.get("imagen"))
-                if imagen_path and os.path.exists(imagen_path):
-                    st.image(imagen_path, use_container_width=True)
-                elif p_mostrar.get("imagen"):
-                    st.warning("⚠️ Imagen no encontrada")
-                
-                st.markdown("**Opciones:**")
-                for opt in p_mostrar["opciones"]:
-                    letra = opt[0]
-                    if letra in p_mostrar['correctas']:
-                        st.markdown(f"✅ **{opt}**")
-                    else:
-                        st.markdown(f"- {opt}")
-                
-                if st.button(f"🗑️ Eliminar", key=f"del_{q['id']}"):
-                    # La purga se limita a la imagen de ESTA pregunta: borrar
-                    # una pregunta no debe arrastrar huérfanas antiguas.
-                    img_borrada = os.path.basename(q["imagen"]) if q.get("imagen") else None
-                    preguntas.remove(q)
-                    save_questions(preguntas)
-                    if img_borrada:
-                        purgar_imagenes_huerfanas(
-                            CARPETA_IMAGENES, preguntas, limitar_a={img_borrada})
-                    st.toast("✅ Pregunta eliminada", icon="🗑️")
-                    st.rerun()
+                # Al editar se usa SIEMPRE q (la original), nunca p_mostrar:
+                # con "🎲 Aleatorizar" activo, p_mostrar está barajada y
+                # guardar sobre ella reescribiría la pregunta mezclada.
+                if st.session_state.get(f"editando_{q['id']}", False):
+                    # st.form: sin él, cada pulsación de tecla rerun-ea la
+                    # pestaña entera (todas las preguntas) por 8 widgets.
+                    with st.form(key=f"form_edit_{q['id']}"):
+                        st.text_area(
+                            "📝 Enunciado",
+                            height=120,
+                            key=f"edit_enun_{q['id']}"
+                        )
+                        
+                        st.caption("⚠️ Rellena al menos 2 opciones y marca las correctas (puedes marcar múltiples).")
+                        for letra in LETRAS_OPCIONES:
+                            col_txt, col_chk = st.columns([5, 1])
+                            with col_txt:
+                                st.text_input(
+                                    f"Opción {letra}",
+                                    key=f"edit_texto_{letra}_{q['id']}",
+                                    placeholder=f"Escribe la respuesta {letra}...",
+                                    label_visibility="collapsed"
+                                )
+                            with col_chk:
+                                st.checkbox(
+                                    letra,
+                                    key=f"edit_corr_{letra}_{q['id']}",
+                                    help=f"Marcar {letra} como correcta"
+                                )
+                        
+                        col_guardar, col_cancelar = st.columns(2)
+                        with col_guardar:
+                            guardar_cambios = st.form_submit_button(
+                                "💾 Guardar cambios", type="primary", use_container_width=True)
+                        with col_cancelar:
+                            cancelar_edicion = st.form_submit_button(
+                                "❌ Cancelar", use_container_width=True)
+                    
+                    if cancelar_edicion:
+                        cerrar_editor_pregunta(q["id"])
+                        st.rerun()
+                    
+                    if guardar_cambios:
+                        # Reconstruir opciones/correctas: correctas solo puede
+                        # contener letras de opciones no vacías.
+                        opciones_editadas = []
+                        correctas_editadas = []
+                        for letra in LETRAS_OPCIONES:
+                            texto = st.session_state[f"edit_texto_{letra}_{q['id']}"].strip()
+                            if texto:
+                                opciones_editadas.append(f"{letra}) {texto}")
+                                if st.session_state[f"edit_corr_{letra}_{q['id']}"]:
+                                    correctas_editadas.append(letra)
+                        
+                        # Se reutiliza el validador de importación: una única
+                        # fuente de verdad para el contrato del esquema.
+                        candidata = {
+                            "id": q["id"],
+                            "pregunta": st.session_state[f"edit_enun_{q['id']}"],
+                            "imagen": q.get("imagen"),
+                            "tag": q.get("tag", ""),
+                            "opciones": opciones_editadas,
+                            "correctas": correctas_editadas,
+                        }
+                        validas_edit, errores_edit = validar_preguntas_importadas([candidata])
+                        
+                        if errores_edit:
+                            for err in errores_edit:
+                                st.error(f"❌ {err}")
+                        else:
+                            q.update(validas_edit[0])
+                            save_questions(preguntas)
+                            cerrar_editor_pregunta(q["id"])
+                            st.toast("✅ Pregunta actualizada", icon="✏️")
+                            st.rerun()
+                else:
+                    st.markdown(f"**{p_mostrar['pregunta']}**")
+                    
+                    imagen_path = resolve_image_path(p_mostrar.get("imagen"))
+                    if imagen_path and os.path.exists(imagen_path):
+                        st.image(imagen_path, use_container_width=True)
+                    elif p_mostrar.get("imagen"):
+                        st.warning("⚠️ Imagen no encontrada")
+                    
+                    st.markdown("**Opciones:**")
+                    for opt in p_mostrar["opciones"]:
+                        letra = opt[0]
+                        if letra in p_mostrar['correctas']:
+                            st.markdown(f"✅ **{opt}**")
+                        else:
+                            st.markdown(f"- {opt}")
+                    
+                    col_edit, col_del = st.columns(2)
+                    
+                    with col_edit:
+                        if st.button("✏️ Editar", key=f"edit_{q['id']}", use_container_width=True):
+                            # Sembrar los valores actuales del banco en las
+                            # claves de los widgets: sin esto (o pasando
+                            # value=), reabrir tras cancelar mostraría los
+                            # textos de la sesión de edición anterior.
+                            st.session_state[f"edit_enun_{q['id']}"] = q["pregunta"]
+                            for i, letra in enumerate(LETRAS_OPCIONES):
+                                if i < len(q["opciones"]):
+                                    par = prefijo_opcion(q["opciones"][i])
+                                    texto = par[1] if par else q["opciones"][i].strip()
+                                    letra_origen = par[0] if par else letra
+                                else:
+                                    texto = ""
+                                    letra_origen = letra
+                                st.session_state[f"edit_texto_{letra}_{q['id']}"] = texto
+                                st.session_state[f"edit_corr_{letra}_{q['id']}"] = (
+                                    letra_origen in q.get("correctas", []))
+                            st.session_state[f"editando_{q['id']}"] = True
+                            st.rerun()
+                    
+                    with col_del:
+                        if st.button(f"🗑️ Eliminar", key=f"del_{q['id']}", use_container_width=True):
+                            # La purga se limita a la imagen de ESTA pregunta: borrar
+                            # una pregunta no debe arrastrar huérfanas antiguas.
+                            img_borrada = os.path.basename(q["imagen"]) if q.get("imagen") else None
+                            preguntas.remove(q)
+                            save_questions(preguntas)
+                            if img_borrada:
+                                purgar_imagenes_huerfanas(
+                                    CARPETA_IMAGENES, preguntas, limitar_a={img_borrada})
+                            st.toast("✅ Pregunta eliminada", icon="🗑️")
+                            st.rerun()
 
 # ========================================
 # PESTAÑA 4: SIMULADOR OPTIMIZADO SIN PARPADEOS
