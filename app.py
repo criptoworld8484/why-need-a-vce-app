@@ -21,6 +21,9 @@ from src.preguntas import (LETRAS_OPCIONES, prefijo_opcion,
                            validar_preguntas_importadas, reasignar_ids,
                            purgar_imagenes_huerfanas)
 from src.examen import calcular_resultado
+from src.historial import (cargar_historial, clave_pregunta, guardar_historial,
+                           historial_vacio, registrar_examen,
+                           resumen_reiteradas)
 from src.backup import export_questions_to_zip, import_questions_from_zip
 
 # ✅ CONFIGURACIÓN PROTEGIDA DE OPENCV
@@ -621,6 +624,7 @@ DATA_DIR = get_data_dir()
 os.makedirs(DATA_DIR, exist_ok=True)
 
 ARCHIVO_JSON = os.path.join(DATA_DIR, "preguntas.json")
+ARCHIVO_HISTORIAL = os.path.join(DATA_DIR, "historial_fallos.json")
 CARPETA_IMAGENES = os.path.join(DATA_DIR, "imagenes_preguntas")
 os.makedirs(CARPETA_IMAGENES, exist_ok=True)
 
@@ -749,6 +753,29 @@ def save_questions(preguntas_actualizadas):
         os.fsync(f.fileno())
     os.replace(tmp_path, ARCHIVO_JSON)
     load_questions.clear()
+
+def _registrar_historial():
+    """Registra el examen recién terminado en el historial de fallos.
+
+    Cualquier no acierto (incorrecta, parcial o no respondida) suma un fallo
+    por pregunta. Se llama una sola vez por examen (Finalizar, timeout del
+    timer o fallback de resultados): el flag de sesión evita dobles registros
+    cuando el timeout y el cálculo de resultados coinciden en el mismo rerun.
+    """
+    if st.session_state.get("historial_examen_registrado", False):
+        return
+    try:
+        historial = cargar_historial(ARCHIVO_HISTORIAL)
+        historial = registrar_examen(
+            historial,
+            st.session_state.preguntas_simulador,
+            st.session_state.respuestas_usuario,
+        )
+        guardar_historial(ARCHIVO_HISTORIAL, historial)
+    except (OSError, KeyError):
+        # Un fallo de disco no debe romper la pantalla de resultados.
+        pass
+    st.session_state.historial_examen_registrado = True
 
 preguntas = load_questions()
 
@@ -938,7 +965,7 @@ def cerrar_editor_pregunta(qid):
         st.session_state.pop(f"edit_corr_{letra}_{qid}", None)
 
 # --- PESTAÑAS PRINCIPALES CON ESTADO ---
-opciones_pestanas = ["✍️ Ingesta Manual", "📸 Extracción OCR", "📊 Ver Preguntas", "🎮 Simulador"]
+opciones_pestanas = ["✍️ Ingesta Manual", "📸 Extracción OCR", "📊 Ver Preguntas", "🎮 Simulador", "🔁 Sección Errores Reiterados"]
 
 if "pestana_actual" not in st.session_state:
     st.session_state.pestana_actual = opciones_pestanas[0]
@@ -1961,6 +1988,7 @@ elif pestana_seleccionada == "🎮 Simulador":
                     st.session_state.indice_actual = 0
                     st.session_state.respuestas_usuario = {}
                     st.session_state.mostrar_resultados = False
+                    st.session_state.historial_examen_registrado = False
                     
                     # Guardar configuración del examen
                     st.session_state.modo_examen = modo_examen
@@ -1981,7 +2009,8 @@ elif pestana_seleccionada == "🎮 Simulador":
                     contar_no_respondidas_como_incorrectas=st.session_state.get("timer_activo", False),
                 )
                 st.session_state.resultado_final = res
-            
+                _registrar_historial()
+
             st.markdown("## 🎯 Resultados del Examen")
             st.markdown('<div id="reporte-topo"></div>', unsafe_allow_html=True)
             
@@ -2011,6 +2040,18 @@ elif pestana_seleccionada == "🎮 Simulador":
                 st.warning("😊 Aprobado - Puedes mejorar")
             else:
                 st.error("😔 No aprobado - Sigue estudiando")
+
+            # Mini-resumen de reiteradas: cuántas preguntas de ESTE examen
+            # acumulan ya 2+ fallos en el historial completo.
+            try:
+                claves_reiteradas = {r["clave"] for r in resumen_reiteradas(cargar_historial(ARCHIVO_HISTORIAL), 2)}
+                claves_examen = {clave_pregunta(p) for p in st.session_state.preguntas_simulador}
+                reiteradas_examen = claves_examen & claves_reiteradas
+                if reiteradas_examen:
+                    st.info(f"🔁 {len(reiteradas_examen)} pregunta(s) de este examen ya se fallan de "
+                            f"forma reiterada: repásalas en la pestaña **🔁 Sección Errores Reiterados**.")
+            except OSError:
+                pass
             
             st.markdown("---")
             st.markdown("### 📋 Revisión Detallada")
@@ -2262,6 +2303,7 @@ elif pestana_seleccionada == "🎮 Simulador":
                             contar_no_respondidas_como_incorrectas=True,
                         )
                         st.session_state.mostrar_resultados = True
+                        _registrar_historial()
                         # scope="app": hay que salir de la pantalla de examen
                         # entera, no solo del fragmento del timer.
                         if ST_FRAGMENT_AVAILABLE:
@@ -2645,4 +2687,106 @@ elif pestana_seleccionada == "🎮 Simulador":
                                 contar_no_respondidas_como_incorrectas=st.session_state.get("timer_activo", False),
                             )
                             st.session_state.mostrar_resultados = True
+                            _registrar_historial()
                         st.rerun()
+
+# ========================================
+# PESTAÑA 5: SECCIÓN ERRORES REITERADOS
+# ========================================
+elif pestana_seleccionada == "🔁 Sección Errores Reiterados":
+    st.header("🔁 Sección Errores Reiterados")
+    st.caption("Cada examen terminado registra un fallo por pregunta no acertada "
+               "(incorrecta, parcial o sin responder). Aquí quedan las que se "
+               "repiten para poder repasarlas y comprobarlas.")
+
+    historial_actual = cargar_historial(ARCHIVO_HISTORIAL)
+
+    col_ctrl1, col_ctrl2 = st.columns(2)
+    with col_ctrl1:
+        umbral_reiteradas = st.slider(
+            "Mínimo de fallos para considerar una pregunta reiterada",
+            min_value=1, max_value=10, value=2, step=1, key="reiteradas_umbral",
+        )
+    with col_ctrl2:
+        ventana_opcion = st.selectbox(
+            "Ventana de tiempo",
+            ["Todo el historial", "Últimos 7 días", "Últimos 30 días", "Últimos 90 días"],
+            key="reiteradas_ventana",
+        )
+    dias_ventana = {"Todo el historial": None, "Últimos 7 días": 7,
+                    "Últimos 30 días": 30, "Últimos 90 días": 90}[ventana_opcion]
+
+    resumen = resumen_reiteradas(historial_actual, umbral_reiteradas, dias=dias_ventana)
+    con_fallos = [d for d in historial_actual.get("preguntas", {}).values()
+                  if any(e.get("resultado") == "fallo" for e in d.get("eventos", []))]
+
+    col_m1, col_m2, col_m3 = st.columns(3)
+    with col_m1:
+        st.metric("📝 Exámenes registrados", historial_actual.get("examenes", 0))
+    with col_m2:
+        st.metric("❌ Preguntas con fallos", len(con_fallos))
+    with col_m3:
+        st.metric("🔁 Reiteradas ahora", len(resumen))
+
+    st.markdown("---")
+
+    if historial_actual.get("examenes", 0) == 0:
+        st.info("ℹ️ Aún no hay exámenes registrados. Termina un examen en la pestaña "
+                "🎮 Simulador y las preguntas que falles quedarán registradas aquí.")
+    elif not resumen:
+        st.success(f"✅ Ninguna pregunta alcanza {umbral_reiteradas} fallos en la ventana seleccionada. ¡Bien!")
+    else:
+        claves_banco = {clave_pregunta(p) for p in load_questions()}
+
+        def _fecha_humana(texto_iso):
+            try:
+                from datetime import datetime as _dt
+                return _dt.strptime(texto_iso, "%Y-%m-%dT%H:%M:%S").strftime("%d/%m/%Y %H:%M")
+            except (TypeError, ValueError):
+                return "—"
+
+        st.caption(f"📊 {len(resumen)} pregunta(s) reiterada(s) — ordenadas por nº de fallos")
+        for r in resumen:
+            enunciado_html = html.escape(r["enunciado"] or "(sin enunciado)")
+            tag_html = html.escape(r["tag"] or "Sin tag")
+            correctas_txt = ", ".join(r["correctas"]) if r["correctas"] else "?"
+            fuera_banco = "" if r["clave"] in claves_banco else " — <em>ya no está en el banco</em>"
+            ultimo_fallo_humano = _fecha_humana(r["ultimo_fallo"])
+            st.markdown(f"""
+            <div style='
+                background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+                border: 3px solid #fca5a5;
+                border-radius: 12px;
+                padding: 16px;
+                margin-bottom: 12px;
+            '>
+                <div style='font-size: 16px; font-weight: 700; color: #1f2937; margin-bottom: 8px;'>
+                    ❌ {enunciado_html}{fuera_banco}
+                </div>
+                <div style='font-size: 13px; color: #6b7280;'>
+                    Tag: <strong>{tag_html}</strong> · Fallos: <strong style='color: #dc2626;'>{r['fallos']}</strong>
+                    / {r['intentos']} intentos ({r['tasa_fallo']:.0f}% de fallo)
+                    · Último fallo: {ultimo_fallo_humano}
+                </div>
+                <div style='font-size: 13px; color: #059669; margin-top: 4px;'>
+                    ✅ Respuesta(s) correcta(s): <strong>{html.escape(correctas_txt)}</strong>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    with st.expander("⚠️ Zona peligrosa — reiniciar historial"):
+        st.warning("El reinicio borra TODO el historial de fallos acumulado "
+                   "(incluidas las estadísticas de preguntas reiteradas). Esta acción no se puede deshacer.")
+        confirmar_reset = st.checkbox("Estoy seguro de que quiero borrar todo el historial", key="confirmar_reset_historial")
+        if st.button("🗑️ Reiniciar historial a cero", type="primary", disabled=not confirmar_reset):
+            try:
+                os.remove(ARCHIVO_HISTORIAL)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                st.error("No se pudo borrar el archivo del historial.")
+                st.stop()
+            st.toast("🗑️ Historial reiniciado a cero", icon="✅")
+            st.rerun()
