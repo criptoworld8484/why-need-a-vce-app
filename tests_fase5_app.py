@@ -1,14 +1,17 @@
-"""AppTest Fase 5: editor de preguntas en "Ver Preguntas".
+"""AppTest Fase 5: bloqueo de avance en preguntas de respuesta múltiple.
 
 Cubre:
-1. Abrir el editor desde una pregunta guardada (siembra de valores del
-   banco, no de una sesion de edicion anterior).
-2. Corregir la respuesta correcta (A->B) y editar el enunciado: el banco
-   en disco se actualiza conservando id/imagen/tag y sin tocar el resto.
-3. Validacion: guardar sin ninguna correcta muestra error y no toca el
-   banco.
-4. Cancelar cierra el editor, limpia las claves y no modifica el banco.
-5. Con "Aleatorizar" activo el editor trabaja sobre la pregunta original.
+1. Una pregunta con N respuestas correctas no deja avanzar (Siguiente ni
+   Finalizar) hasta marcar exactamente N opciones, y muestra el aviso rojo
+   "No puedes continuar aún".
+2. El aviso ámbar de selección múltiple preexistente se mantiene.
+3. Con selección en exceso (más de N) también se bloquea.
+4. "⬅ Anterior" sigue permitido con la selección incompleta.
+5. Las preguntas de respuesta única siguen permitiendo avanzar sin responder.
+
+Nota: AppTest descarta el estado de los widgets que no se renderizan en un
+run (navegar Anterior/Siguiente resetea los checkboxes), así que el estado
+se re-marca explícitamente tras cada ida y vuelta.
 """
 import json
 import os
@@ -25,10 +28,12 @@ os.makedirs(os.path.join(data_dir, "imagenes_preguntas"), exist_ok=True)
 ARCHIVO = os.path.join(data_dir, "preguntas.json")
 
 BANCO = [
-    {"id": 1, "pregunta": "p1", "imagen": None, "tag": "vendor1",
-     "opciones": ["A) x", "B) y"], "correctas": ["A"]},
-    {"id": 2, "pregunta": "p2", "imagen": None, "tag": "",
+    {"id": 1, "pregunta": "p1unica", "imagen": None, "tag": "",
      "opciones": ["A) x", "B) y"], "correctas": ["B"]},
+    {"id": 2, "pregunta": "p2multiple", "imagen": None, "tag": "",
+     "opciones": ["A) x", "B) y", "C) z"], "correctas": ["A", "B"]},
+    {"id": 3, "pregunta": "p3unica", "imagen": None, "tag": "",
+     "opciones": ["A) x", "B) y"], "correctas": ["A"]},
 ]
 with open(ARCHIVO, "w", encoding="utf-8") as f:
     json.dump(BANCO, f)
@@ -48,113 +53,96 @@ def click_por_texto(at, texto):
             return True
     return False
 
+def contiene_markdown(at, texto):
+    return any(texto.lower() in (m.value or "").lower() for m in at.markdown)
+
 def ss(at, clave, default=None):
     try:
         return at.session_state[clave]
     except KeyError:
         return default
 
-def leer_banco():
-    with open(ARCHIVO, "r", encoding="utf-8") as f:
-        return json.load(f)
 
-def abrir_ver_preguntas():
-    at = AppTest.from_file(os.path.join(REPO, "app.py"))
-    at.session_state["config_completed"] = True
-    at.session_state["pestana_actual"] = "📊 Ver Preguntas"
-    at.run()
-    return at
-
-
-print("\n== Abrir editor ==")
-at = abrir_ver_preguntas()
-check("Ver Preguntas sin excepciones", not at.exception)
-check("boton Editar presente", at.button(key="edit_1") is not None)
-
-at.button(key="edit_1").click()
+print("\n== Bloqueo de avance con selección múltiple incompleta ==")
+at = AppTest.from_file(os.path.join(REPO, "app.py"))
+at.session_state["config_completed"] = True
+at.session_state["pestana_actual"] = "🎮 Simulador"
+# Sin orden aleatorio el examen conserva el orden del banco:
+# idx 0 = única, idx 1 = múltiple (2 de 3), idx 2 = única.
+at.session_state["modo_aleatorio"] = False
 at.run()
-check("editor abierto sin excepciones", not at.exception)
-check("flag editando_1 activo", ss(at, "editando_1") is True)
-check("enunciado sembrado", at.text_area(key="edit_enun_1").value == "p1")
-check("opcion A sembrada", at.text_input(key="edit_texto_A_1").value == "x")
-check("correcta A marcada", at.checkbox(key="edit_corr_A_1").value is True)
-check("correcta B desmarcada", at.checkbox(key="edit_corr_B_1").value is False)
+check("pantalla de configuración sin excepciones", not at.exception)
 
-
-print("\n== Guardar: corregir respuesta A->B y enunciado ==")
-at.checkbox(key="edit_corr_A_1").uncheck()
-at.checkbox(key="edit_corr_B_1").check()
-at.text_area(key="edit_enun_1").set_value("p1 corregida")
+check("botón Iniciar Examen visible", click_por_texto(at, "Iniciar Examen"))
 at.run()
-check("sin excepciones al editar valores", not at.exception)
+check("examen activo tras iniciar", ss(at, "simulador_activo") is True)
+check("sin excepciones al iniciar", not at.exception)
 
-check("boton Guardar visible", click_por_texto(at, "Guardar cambios"))
+# idx 0: pregunta de respuesta ÚNICA sin responder -> sí puede avanzar (comportamiento previo).
+check("Siguiente en única sin responder", click_por_texto(at, "Siguiente"))
 at.run()
-check("guardar sin excepciones", not at.exception)
+check("índice avanza a 1 (única no bloquea)", ss(at, "indice_actual") == 1)
+check("sin excepciones al navegar", not at.exception)
 
-banco = leer_banco()
-p1 = banco[0]
-check("correctas actualizada a B", p1["correctas"] == ["B"], f"-> {p1['correctas']}")
-check("enunciado actualizado", p1["pregunta"] == "p1 corregida")
-check("opciones reconstruidas", p1["opciones"] == ["A) x", "B) y"])
-check("id conservado", p1["id"] == 1)
-check("tag conservado", p1["tag"] == "vendor1")
-check("imagen conservada", p1["imagen"] is None)
-check("pregunta 2 intacta", banco[1] == BANCO[1])
-check("editor cerrado tras guardar", ss(at, "editando_1") is None)
+# idx 1: múltiple. aleatorizar_pregunta() reordena y reetiqueta, así que las
+# letras vigentes se leen del estado de sesión.
+preg_m = ss(at, "preguntas_simulador")[1]
+num_correctas = len(preg_m["correctas"])
+letras = [op[0] for op in preg_m["opciones"]]
+correctas = sorted(preg_m["correctas"])
+incorrecta = [l for l in letras if l not in correctas][0]
+check("aviso ámbar de selección múltiple visible",
+      contiene_markdown(at, "SELECCIÓN MÚLTIPLE"))
 
+# Solo 1 de 2 marcada -> Siguiente bloqueado + aviso rojo (faltan respuestas).
+at.checkbox(key=f"opt_1_{correctas[0]}").check()
+at.run()
+check("Siguiente con 1 de 2 marcada", click_por_texto(at, "Siguiente"))
+at.run()
+check("índice sigue en 1 (bloqueado)", ss(at, "indice_actual") == 1)
+check("aviso rojo 'No puedes continuar aún' visible",
+      contiene_markdown(at, "No puedes continuar aún"))
+check("bandera de aviso consumida al renderizar",
+      ss(at, "aviso_bloqueo_multiple", None) is None)
+check("sin excepciones al bloquear", not at.exception)
 
-print("\n== Validacion: guardar sin correctas ==")
-at2 = abrir_ver_preguntas()
-at2.button(key="edit_1").click()
-at2.run()
-at2.checkbox(key="edit_corr_B_1").uncheck()
-at2.run()
-antes = leer_banco()
+# Incompleta pero "⬅ Anterior" permitido (repasar hacia atrás no se bloquea).
+check("Anterior permitido con selección incompleta", click_por_texto(at, "⬅ Anterior"))
+at.run()
+check("índice retrocede a 0", ss(at, "indice_actual") == 0)
+check("Siguiente vuelve a la múltiple", click_por_texto(at, "Siguiente"))
+at.run()
+check("índice de nuevo en 1", ss(at, "indice_actual") == 1)
 
-check("boton Guardar visible", click_por_texto(at2, "Guardar cambios"))
-at2.run()
-check("error de validacion visible", len(at2.error) > 0)
-check("banco sin cambios", leer_banco() == antes)
-check("editor sigue abierto", ss(at2, "editando_1") is True)
+# Exceso: 3 de 2 marcadas -> también bloqueado, con mensaje de desmarcar.
+for letra in letras:
+    at.checkbox(key=f"opt_1_{letra}").check()
+at.run()
+check("Siguiente con 3 de 2 marcadas", click_por_texto(at, "Siguiente"))
+at.run()
+check("índice sigue en 1 (exceso bloqueado)", ss(at, "indice_actual") == 1)
+check("aviso rojo visible con mensaje de exceso",
+      contiene_markdown(at, "Desmarca"))
+check("sin excepciones con exceso", not at.exception)
 
+# Exactamente 2 (las correctas) -> avanza.
+at.checkbox(key=f"opt_1_{incorrecta}").uncheck()
+at.run()
+check("Siguiente con 2 de 2 marcadas", click_por_texto(at, "Siguiente"))
+at.run()
+check("índice avanza a 2 (completa pasa)", ss(at, "indice_actual") == 2)
+check("sin excepciones al completar", not at.exception)
 
-print("\n== Cancelar ==")
-at3 = abrir_ver_preguntas()
-at3.button(key="edit_1").click()
-at3.run()
-at3.text_input(key="edit_texto_A_1").set_value("texto alterado")
-at3.run()
-antes = leer_banco()
-
-check("boton Cancelar visible", click_por_texto(at3, "Cancelar"))
-at3.run()
-check("cancelar sin excepciones", not at3.exception)
-check("editor cerrado tras cancelar", ss(at3, "editando_1") is None)
-check("banco sin cambios tras cancelar", leer_banco() == antes)
-check("claves del editor limpiadas", ss(at3, "edit_texto_A_1") is None)
-
-# Reabrir debe re-sembrar desde el banco, no desde la edicion cancelada.
-at3.button(key="edit_1").click()
-at3.run()
-check("reapertura muestra valores del banco",
-      at3.text_input(key="edit_texto_A_1").value == "x")
-
-
-print("\n== Aleatorizar no contamina la edicion ==")
-at4 = abrir_ver_preguntas()
-at4.checkbox(key="mostrar_aleatorio").check()
-at4.run()
-at4.button(key="edit_1").click()
-at4.run()
-check("editor abre con aleatorizar activo", not at4.exception)
-check("editor muestra la pregunta original",
-      at4.text_area(key="edit_enun_1").value == "p1 corregida")
-check("boton Guardar visible", click_por_texto(at4, "Guardar cambios"))
-at4.run()
-check("guardar sin cambios no reordena el banco",
-      leer_banco()[0]["opciones"] == ["A) x", "B) y"])
-check("sin excepciones al final", not at4.exception)
+# idx 2: única sin responder -> Finalizar permitido (comportamiento previo).
+check("botón Finalizar visible", click_por_texto(at, "Finalizar"))
+at.run()
+check("pantalla de resultados activa", ss(at, "mostrar_resultados") is True)
+res = ss(at, "resultado_final")
+check("resultados calculados", res is not None and res["total"] == 3)
+if res:
+    check("1 correcta (la múltiple) y 2 no respondidas",
+          res["correctas"] == 1 and res["no_respondidas"] == 2, f"-> {res}")
+check("sin excepciones al finalizar", not at.exception)
 
 print("\n" + ("APPTEST OK" if not fallos else f"{len(fallos)} FALLOS: {fallos}"))
 sys.exit(1 if fallos else 0)

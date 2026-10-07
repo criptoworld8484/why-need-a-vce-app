@@ -2418,6 +2418,61 @@ elif pestana_seleccionada == "🎮 Simulador":
                     }}
                 </style>
                 """, unsafe_allow_html=True)
+
+                # 🚫 AVISO DE BLOQUEO: se activa al intentar avanzar con la
+                # selección incompleta (o en exceso) en una pregunta múltiple.
+                if st.session_state.pop("aviso_bloqueo_multiple", False):
+                    marcadas_bloqueo = [
+                        op[0] for op in preg["opciones"]
+                        if st.session_state.get(f"opt_{idx}_{op[0]}", False)
+                    ]
+                    if len(marcadas_bloqueo) < num_correctas:
+                        detalle_bloqueo = (
+                            f"Has marcado <strong>{len(marcadas_bloqueo)}</strong> de "
+                            f"<strong>{num_correctas}</strong> respuestas. Debes marcar "
+                            f"<strong>{num_correctas - len(marcadas_bloqueo)}</strong> más "
+                            "para poder continuar."
+                        )
+                    else:
+                        detalle_bloqueo = (
+                            f"Has marcado <strong>{len(marcadas_bloqueo)}</strong> respuestas, "
+                            f"pero esta pregunta requiere exactamente <strong>{num_correctas}</strong>. "
+                            "Desmarca las que sobren para poder continuar."
+                        )
+                    st.markdown(f"""
+                    <div style='
+                        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                        border: 4px solid #b91c1c;
+                        border-radius: 12px;
+                        padding: 20px;
+                        margin: 20px 0;
+                        box-shadow: 0 8px 16px rgba(239, 68, 68, 0.4);
+                    '>
+                        <div style='display: flex; align-items: center; gap: 16px;'>
+                            <div style='
+                                width: 60px;
+                                height: 60px;
+                                background: white;
+                                border-radius: 50%;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                font-size: 32px;
+                                box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                            '>
+                                🚫
+                            </div>
+                            <div style='flex: 1;'>
+                                <div style='color: white; font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;'>
+                                    🚫 No puedes continuar aún 🚫
+                                </div>
+                                <div style='color: #ffffff; font-size: 18px; font-weight: 600;'>
+                                    Esta pregunta requiere exactamente <strong style='font-size: 24px; background: white; color: #dc2626; padding: 4px 12px; border-radius: 6px;'>{num_correctas}</strong> respuestas. {detalle_bloqueo}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
             else:
                 # Aviso para respuesta única (más discreto pero visible)
                 st.markdown(f"""
@@ -2571,10 +2626,18 @@ elif pestana_seleccionada == "🎮 Simulador":
             with col3:
                 if idx < total - 1:
                     if st.button("Siguiente ➡", type="primary", use_container_width=True):
+                        # En preguntas de respuesta múltiple no se puede avanzar
+                        # hasta marcar exactamente el total de respuestas requeridas.
+                        if es_multiple and len(respuestas_actuales) != num_correctas:
+                            st.session_state.aviso_bloqueo_multiple = True
+                            st.rerun()
                         st.session_state.indice_actual += 1
                         st.rerun()
                 else:
                     if st.button("🏁 Finalizar", type="primary", use_container_width=True):
+                        if es_multiple and len(respuestas_actuales) != num_correctas:
+                            st.session_state.aviso_bloqueo_multiple = True
+                            st.rerun()
                         with st.spinner("📊 Calculando tus resultados finales..."):
                             st.session_state.resultado_final = calcular_resultado(
                                 st.session_state.preguntas_simulador,
