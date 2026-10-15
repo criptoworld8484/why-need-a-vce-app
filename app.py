@@ -2736,7 +2736,8 @@ elif pestana_seleccionada == "🔁 Sección Errores Reiterados":
     elif not resumen:
         st.success(f"✅ Ninguna pregunta alcanza {umbral_reiteradas} fallos en la ventana seleccionada. ¡Bien!")
     else:
-        claves_banco = {clave_pregunta(p) for p in load_questions()}
+        banco_por_clave = {clave_pregunta(p): p for p in load_questions()}
+        claves_banco = set(banco_por_clave)
 
         def _fecha_humana(texto_iso):
             try:
@@ -2746,6 +2747,47 @@ elif pestana_seleccionada == "🔁 Sección Errores Reiterados":
                 return "—"
 
         st.caption(f"📊 {len(resumen)} pregunta(s) reiterada(s) — ordenadas por nº de fallos")
+
+        # En el mismo orden del resumen (más fallos primero). Las que ya no
+        # están en el banco no se pueden practicar: el snapshot del historial
+        # no guarda opciones ni imagen, solo el enunciado recortado.
+        preguntas_reiteradas = [banco_por_clave[r["clave"]] for r in resumen
+                                if r["clave"] in banco_por_clave]
+        if len(preguntas_reiteradas) < len(resumen):
+            st.caption(f"ℹ️ {len(resumen) - len(preguntas_reiteradas)} reiterada(s) ya no está(n) "
+                       "en el banco y quedan fuera del test (solo se conserva su snapshot).")
+
+        def _lanzar_test_reiteradas(preguntas):
+            """Callback del botón: prepara el examen de práctica y salta al Simulador.
+
+            Se hace en on_click y no en el cuerpo del botón porque la clave del
+            widget del radio de pestañas ('pestana_radio') solo puede escribirse
+            antes de que el radio se instancie en el siguiente run.
+            """
+            st.session_state.preguntas_simulador = [aleatorizar_pregunta(p) for p in preguntas]
+            st.session_state.simulador_activo = True
+            st.session_state.indice_actual = 0
+            st.session_state.respuestas_usuario = {}
+            st.session_state.mostrar_resultados = False
+            st.session_state.resultado_final = None
+            st.session_state.historial_examen_registrado = False
+            st.session_state.modo_examen = "Práctica"
+            st.session_state.tiempo_limite = 0
+            st.session_state.tiempo_inicio = time.time()
+            st.session_state.timer_activo = False
+            st.session_state["pestana_radio"] = "🎮 Simulador"
+
+        st.button(
+            "🎯 Hacer test de práctica con estas preguntas",
+            type="primary",
+            disabled=not preguntas_reiteradas,
+            on_click=_lanzar_test_reiteradas,
+            args=(preguntas_reiteradas,),
+            help="Abre el Simulador en modo Práctica (sin límite de tiempo) solo con las "
+                 "reiteradas que siguen en el banco. Al finalizar, el intento queda "
+                 "registrado en el historial para ver tu progreso.",
+        )
+
         for r in resumen:
             enunciado_html = html.escape(r["enunciado"] or "(sin enunciado)")
             tag_html = html.escape(r["tag"] or "Sin tag")
@@ -2773,6 +2815,20 @@ elif pestana_seleccionada == "🔁 Sección Errores Reiterados":
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+            # El snapshot de la tarjeta recorta el enunciado a 300 chars y no
+            # guarda opciones ni imagen: para leer la pregunta completa se
+            # recupera del banco con la clave de firma.
+            preg_banco = banco_por_clave.get(r["clave"])
+            if preg_banco is not None:
+                with st.expander("📖 Ver pregunta completa"):
+                    imagen_path = resolve_image_path(preg_banco.get("imagen"))
+                    if imagen_path and os.path.exists(imagen_path):
+                        st.image(imagen_path, use_container_width=True)
+                    st.markdown(f"**{preg_banco.get('pregunta') or '(sin enunciado)'}**")
+                    st.markdown("**Opciones:**")
+                    for opcion in preg_banco.get("opciones", []):
+                        st.markdown(f"- {opcion}")
 
     st.markdown("---")
 
