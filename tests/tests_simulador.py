@@ -49,5 +49,15 @@ hist_normal = registrar_examen({}, BANCO, {0: ["A"]}, fecha=FECHA)
 check("las no respondidas siguen contando como fallo",
       total_eventos(hist_normal) == 3, f"-> {total_eventos(hist_normal)}")
 
+print("\n== atajos de teclado ==")
+from src.atajos_teclado import ACCIONES, inyectar_atajos
+
+with open(os.path.join(REPO, "app.py"), encoding="utf-8") as f:
+    app_fuente = f.read()
+for accion, etiqueta in ACCIONES.items():
+    check(f"la etiqueta de '{accion}' coincide con un boton de app.py",
+          etiqueta in app_fuente, f"-> '{etiqueta}'")
+check("el modulo expone inyectar_atajos", callable(inyectar_atajos))
+
 print("\n" + ("TODOS OK" if not fallos else f"{len(fallos)} FALLOS: {fallos}"))
 sys.exit(1 if fallos else 0)

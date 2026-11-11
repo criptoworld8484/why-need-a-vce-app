@@ -28,6 +28,7 @@ from src.backup import export_questions_to_zip, import_questions_from_zip
 from src.modelos_ocr import (MODELO_OCR_PREDEFINIDO, MODELOS_OCR_RESERVA,
                              es_error_modelo_no_disponible, listar_modelos_ocr,
                              modelo_ocr_preferido)
+from src.atajos_teclado import inyectar_atajos
 
 # ✅ CONFIGURACIÓN PROTEGIDA DE OPENCV
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "0"
@@ -2693,6 +2694,11 @@ elif pestana_seleccionada == "🎮 Simulador":
             else:
                 if idx in st.session_state.respuestas_usuario:
                     del st.session_state.respuestas_usuario[idx]
+            
+            # --- ATAJOS DE TECLADO ---
+            # Enter / flecha derecha = Siguiente (o Finalizar en la última),
+            # flecha izquierda = Anterior. Ver src/atajos_teclado.py.
+            inyectar_atajos()
             
             # --- VER RESPUESTA CORRECTA ---
             # Disponible en ambos modos a petición del usuario (estilo
