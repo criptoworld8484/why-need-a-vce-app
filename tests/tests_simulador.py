@@ -50,14 +50,27 @@ check("las no respondidas siguen contando como fallo",
       total_eventos(hist_normal) == 3, f"-> {total_eventos(hist_normal)}")
 
 print("\n== atajos de teclado ==")
-from src.atajos_teclado import ACCIONES, inyectar_atajos
+from src.atajos_teclado import ACCIONES_VALIDAS, capturar_tecla
+
+check("las acciones validas son adelante/atras",
+      ACCIONES_VALIDAS == ("adelante", "atras"), f"-> {ACCIONES_VALIDAS}")
+check("sin ejecucion de Streamlit no hay tecla (None)",
+      capturar_tecla() is None, f"-> {capturar_tecla()}")
 
 with open(os.path.join(REPO, "app.py"), encoding="utf-8") as f:
     app_fuente = f.read()
-for accion, etiqueta in ACCIONES.items():
-    check(f"la etiqueta de '{accion}' coincide con un boton de app.py",
-          etiqueta in app_fuente, f"-> '{etiqueta}'")
-check("el modulo expone inyectar_atajos", callable(inyectar_atajos))
+check("app.py captura la tecla y navega con las acciones del componente",
+      "capturar_tecla" in app_fuente
+      and '"adelante"' in app_fuente and '"atras"' in app_fuente)
+with open(os.path.join(REPO, "src", "atajos_componente", "index.html"),
+          encoding="utf-8") as f:
+    componente = f.read()
+check("el componente habla el protocolo de componentes de Streamlit",
+      "streamlit:setComponentValue" in componente
+      and "streamlit:componentReady" in componente)
+check("el componente escucha el teclado en su propio documento y en el padre",
+      'window.addEventListener("keydown"' in componente
+      and 'window.parent.document.addEventListener("keydown"' in componente)
 
 print("\n" + ("TODOS OK" if not fallos else f"{len(fallos)} FALLOS: {fallos}"))
 sys.exit(1 if fallos else 0)

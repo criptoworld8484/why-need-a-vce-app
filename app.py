@@ -28,7 +28,7 @@ from src.backup import export_questions_to_zip, import_questions_from_zip
 from src.modelos_ocr import (MODELO_OCR_PREDEFINIDO, MODELOS_OCR_RESERVA,
                              es_error_modelo_no_disponible, listar_modelos_ocr,
                              modelo_ocr_preferido)
-from src.atajos_teclado import inyectar_atajos
+from src.atajos_teclado import capturar_tecla
 
 # ✅ CONFIGURACIÓN PROTEGIDA DE OPENCV
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "0"
@@ -2709,9 +2709,46 @@ elif pestana_seleccionada == "🎮 Simulador":
                     del st.session_state.respuestas_usuario[idx]
             
             # --- ATAJOS DE TECLADO ---
-            # Enter / flecha derecha = Siguiente (o Finalizar en la última),
-            # flecha izquierda = Anterior. Ver src/atajos_teclado.py.
-            inyectar_atajos()
+            # El componente captura la tecla y la navega Python (sin depender
+            # del DOM de los botones). Enter / flecha derecha = adelante
+            # (Siguiente, o Finalizar en la última); flecha izquierda = atrás.
+            atajo = capturar_tecla()
+            if atajo and atajo.get("ts") != st.session_state.get("atajos_ts"):
+                st.session_state.atajos_ts = atajo["ts"]
+                num_correctas_atajo = len(preg.get("correctas", []))
+                marcadas_atajo = [
+                    op[0] for op in preg["opciones"]
+                    if st.session_state.get(f"opt_{idx}_{op[0]}", False)
+                ]
+                bloqueo_multiple = (
+                    num_correctas_atajo > 1
+                    and len(marcadas_atajo) != num_correctas_atajo
+                )
+                if atajo["tecla"] == "atras":
+                    if idx > 0:
+                        st.session_state.indice_actual -= 1
+                        st.rerun()
+                elif atajo["tecla"] == "adelante":
+                    if idx < total - 1:
+                        if bloqueo_multiple:
+                            st.session_state.aviso_bloqueo_multiple = True
+                            st.rerun()
+                        st.session_state.indice_actual += 1
+                        st.rerun()
+                    else:
+                        # En la última pregunta, Enter/flecha = Finalizar.
+                        if bloqueo_multiple:
+                            st.session_state.aviso_bloqueo_multiple = True
+                            st.rerun()
+                        with st.spinner("📊 Calculando tus resultados finales..."):
+                            st.session_state.resultado_final = calcular_resultado(
+                                st.session_state.preguntas_simulador,
+                                st.session_state.respuestas_usuario,
+                                contar_no_respondidas_como_incorrectas=st.session_state.get("timer_activo", False),
+                            )
+                            st.session_state.mostrar_resultados = True
+                            _registrar_historial()
+                        st.rerun()
             
             st.markdown("---")
             

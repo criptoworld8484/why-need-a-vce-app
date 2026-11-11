@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8">
+<title>Atajos de teclado</title>
+</head>
+<body style="margin:0">
+<script>
+// Componente de teclado del simulador.
+//
+// Captura las teclas esté el foco en el documento padre (uso normal) o en
+// este propio iframe, y las devuelve a Python como valor del componente a
+// través del protocolo de componentes de Streamlit. La navegación la decide
+// Python: este archivo no toca el DOM de la aplicación.
+
+function enviar(tecla) {
+  window.parent.postMessage({
+    isStreamlitMessage: true,
+    type: "streamlit:setComponentValue",
+    value: {tecla: tecla, ts: Date.now()},
+    dataType: "json"
+  }, "*");
+}
+
+function manejar(e) {
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  const t = e.target || {};
+  const tag = (t.tagName || "").toLowerCase();
+  const tipo = (t.type || "").toLowerCase();
+  // No secuestrar la escritura en campos de texto ni el Enter nativo de un
+  // botón enfocado (que ya se activa solo).
+  if (tag === "textarea" || tag === "select") return;
+  if (tag === "input" && tipo !== "checkbox" && tipo !== "radio") return;
+  if (t.isContentEditable) return;
+  const k = e.key || "";
+  const c = e.code || "";
+  const enter = k === "Enter" || c === "Enter" || c === "NumpadEnter";
+  if (enter && tag === "button") return;
+  const adelante = enter || k === "ArrowRight" || c === "ArrowRight";
+  const atras = k === "ArrowLeft" || c === "ArrowLeft";
+  if (adelante) {
+    e.preventDefault();
+    enviar("adelante");
+  } else if (atras) {
+    e.preventDefault();
+    enviar("atras");
+  }
+}
+
+// Handshake del protocolo de componentes de Streamlit.
+window.parent.postMessage({
+  isStreamlitMessage: true,
+  type: "streamlit:componentReady",
+  apiVersion: 1
+}, "*");
+
+// Un listener por documento: este iframe (si el foco termina aquí dentro) y
+// el documento padre (foco normal de la aplicación).
+window.addEventListener("keydown", manejar, true);
+try {
+  window.parent.document.addEventListener("keydown", manejar, true);
+} catch (err) {
+  // Sin acceso al padre no hay atajos; la app sigue siendo usable con ratón.
+}
+</script>
+</body>
+</html>
