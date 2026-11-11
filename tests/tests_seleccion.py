@@ -1,6 +1,6 @@
 """Tests de la logica de seleccion del simulador (rango ordinal + duplicados)."""
 import sys, os
-sys.path.insert(0, "/home/criptoworld/Documents/OpenCode/AuditarSimuladorcerti/MyVCE_Funcional")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.seleccion import (
     firma_pregunta, deduplicar, coincide_tag, seleccionar_pool, detectar_conflictos,

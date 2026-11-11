@@ -4,7 +4,7 @@ import shutil
 import sys
 import tempfile
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 
 from src.preguntas import imagenes_referenciadas, purgar_imagenes_huerfanas

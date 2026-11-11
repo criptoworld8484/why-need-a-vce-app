@@ -7,7 +7,7 @@ import sys
 import tempfile
 import zipfile
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 
 import src.backup as backup

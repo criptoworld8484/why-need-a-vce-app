@@ -15,7 +15,7 @@ import os
 import sys
 import tempfile
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 
 tmp_home = tempfile.mkdtemp(prefix="vce_test_fase7app_")
