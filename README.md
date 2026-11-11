@@ -40,7 +40,7 @@ Al abrir la app por primera vez aparece un asistente:
 | ✍️ Ingesta Manual | Añadir preguntas con imágenes, hasta 6 opciones, respuesta múltiple y tags |
 | 📸 Extracción OCR | Extraer preguntas desde capturas de pantalla con Gemini, revisar y guardar |
 | 📊 Ver Preguntas | Buscar, filtrar por tag, editar y eliminar; importar/exportar en ZIP |
-| 🎮 Simulador | Modo Práctica (sin tiempo, feedback inmediato) y Modo Examen (temporizador, evaluación final) |
+| 🎮 Simulador | Modo Práctica (sin tiempo, feedback inmediato) y Modo Examen (temporizador, evaluación final). Puedes terminar cuando quieras, ver la opción correcta y navegar con el teclado (`Enter`/`→` avanzan, `←` vuelve) |
 | 🔁 Errores Reiterados | Preguntas falladas en varios exámenes y test de práctica con ellas |
 
 ---
