@@ -2038,6 +2038,7 @@ elif pestana_seleccionada == "🎮 Simulador":
                     st.session_state.tiempo_limite = tiempo_minutos * 60
                     st.session_state.tiempo_inicio = time.time()
                     st.session_state.timer_activo = (modo_examen == "Examen")
+                    st.session_state.respuestas_reveladas = set()
                 st.rerun()
         
         # ========================================
@@ -2692,6 +2693,17 @@ elif pestana_seleccionada == "🎮 Simulador":
             else:
                 if idx in st.session_state.respuestas_usuario:
                     del st.session_state.respuestas_usuario[idx]
+            
+            # --- VER RESPUESTA CORRECTA ---
+            # Disponible en ambos modos a petición del usuario (estilo
+            # estudio): revela la letra correcta sin afectar al marcador.
+            reveladas = st.session_state.setdefault("respuestas_reveladas", set())
+            if idx not in reveladas:
+                if st.button("👁️ Ver respuesta correcta", use_container_width=True):
+                    reveladas.add(idx)
+                    st.rerun()
+            else:
+                st.success(f"👁️ Respuesta correcta: **{', '.join(preg['correctas'])}**")
             
             st.markdown("---")
             
