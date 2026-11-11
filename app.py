@@ -25,6 +25,9 @@ from src.historial import (cargar_historial, clave_pregunta, guardar_historial,
                            historial_vacio, registrar_examen,
                            resumen_reiteradas)
 from src.backup import export_questions_to_zip, import_questions_from_zip
+from src.modelos_ocr import (MODELO_OCR_PREDEFINIDO, MODELOS_OCR_RESERVA,
+                             es_error_modelo_no_disponible, listar_modelos_ocr,
+                             modelo_ocr_preferido)
 
 # ✅ CONFIGURACIÓN PROTEGIDA DE OPENCV
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "0"
@@ -823,7 +826,7 @@ def aleatorizar_pregunta(pregunta):
     return pregunta_aleatoria
 
 # --- FUNCIÓN OCR ---
-def extract_text_from_image(image_path, api_key, modelo="gemini-2.5-flash", max_retries=2):
+def extract_text_from_image(image_path, api_key, modelo=MODELO_OCR_PREDEFINIDO, max_retries=2):
     if not GENAI_AVAILABLE:
         return {"error": "google.genai no está instalado. Ejecuta: pip install google-genai"}
     
@@ -915,6 +918,22 @@ def extract_text_from_image(image_path, api_key, modelo="gemini-2.5-flash", max_
         
         except Exception as e:
             error_str = str(e)
+            
+            if es_error_modelo_no_disponible(error_str):
+                # Sin reintentos: el modelo no existe para esta cuenta y
+                # volver a llamar devuelve el mismo 404.
+                return {
+                    "error": "modelo_no_disponible",
+                    "mensaje": f"""⚠️ **Modelo no disponible**
+
+El modelo `{modelo}` no está disponible para tu API Key (Google retira
+modelos para usuarios nuevos aunque sigan activos en cuentas antiguas).
+
+**Solución:** en **⚙️ Modelo** elige otro de la lista (por ejemplo
+`gemini-3.8-flash`) y vuelve a procesar la imagen.
+                    """.strip(),
+                    "detalle": error_str,
+                }
             
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
                 retry_match = re.search(r'retry in (\d+(?:\.\d+)?)', error_str)
@@ -1181,15 +1200,30 @@ elif pestana_seleccionada == "📸 Extracción OCR":
         
         with col_config2:
             with st.expander("⚙️ Modelo", expanded=False):
+                # La disponibilidad de modelos depende de la cuenta de la API
+                # Key (los retirados para usuarios nuevos siguen activos en
+                # cuentas antiguas), así que la lista se consulta a la API y
+                # se cachea mientras la key no cambie.
+                api_key_ocr_actual = st.session_state.get("api_key_ocr", "")
+                cache_modelos = st.session_state.get("modelos_ocr_cache")
+                if not cache_modelos or cache_modelos[0] != api_key_ocr_actual:
+                    disponibles = listar_modelos_ocr(api_key_ocr_actual) if api_key_ocr_actual.strip() else None
+                    st.session_state.modelos_ocr_cache = (api_key_ocr_actual, disponibles)
+                    cache_modelos = st.session_state.modelos_ocr_cache
+                
+                modelos_disponibles = cache_modelos[1] or MODELOS_OCR_RESERVA
                 modelo_seleccionado = st.selectbox(
                     "Modelo",
-                    options=[
-                        "gemini-2.5-flash",
-                        "gemini-3-flash-preview",
-                        "gemini-3.1-pro-preview"
-                    ],
-                    index=0
+                    options=modelos_disponibles,
+                    index=modelos_disponibles.index(modelo_ocr_preferido(modelos_disponibles))
                 )
+                
+                if cache_modelos[1] is None and api_key_ocr_actual.strip():
+                    st.caption("⚠️ No se pudo consultar los modelos a la API; mostrando la lista habitual.")
+                
+                if st.button("🔄 Actualizar lista de modelos"):
+                    st.session_state.pop("modelos_ocr_cache", None)
+                    st.rerun()
         
         uploaded_file = st.file_uploader(
             "📤 Sube captura de pantalla",
@@ -1351,6 +1385,11 @@ elif pestana_seleccionada == "📸 Extracción OCR":
                 elif resultado_texto.get("error") == "cuota_excedida":
                     st.error("🚫 Cuota agotada")
                     st.markdown(resultado_texto.get("mensaje", ""))
+                elif resultado_texto.get("error") == "modelo_no_disponible":
+                    st.error("⚠️ Modelo no disponible")
+                    st.markdown(resultado_texto.get("mensaje", ""))
+                    with st.expander("🔧 Detalle técnico"):
+                        st.code(resultado_texto.get("detalle", ""))
                 else:
                     st.error(f"❌ {resultado_texto['error']}")
 

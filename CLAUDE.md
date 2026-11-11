@@ -59,7 +59,7 @@ Image paths are stored **relative** to the data dir in JSON (`get_relative_image
 
 ### OCR
 
-`extract_text_from_image()` calls Gemini (`gemini-2.5-flash`), strips markdown fences, and validates the JSON contract `{"pregunta": str, "respuestas": list}`. It **always returns a dict** — either the parsed data or `{"error": ...}`, with the sentinel `error == "cuota_excedida"` (plus a `mensaje`) for 429/quota, and exponential-backoff retries otherwise. Callers must branch on `"error" in result`.
+`extract_text_from_image()` calls Gemini (model chosen in the "⚙️ Modelo" expander — the options are listed live from the API via `src/modelos_ocr.py` because availability depends on the API-key account, with `gemini-3.8-flash` as preferred default), strips markdown fences, and validates the JSON contract `{"pregunta": str, "respuestas": list}`. It **always returns a dict** — either the parsed data or `{"error": ...}`, with the sentinel `error == "cuota_excedida"` (plus a `mensaje`) for 429/quota, `error == "modelo_no_disponible"` (plus `mensaje`/`detalle`) for the 404 of a model retired for the account, and exponential-backoff retries otherwise. Callers must branch on `"error" in result`.
 
 ### Simulator / timer
 
