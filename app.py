@@ -757,13 +757,16 @@ def save_questions(preguntas_actualizadas):
     os.replace(tmp_path, ARCHIVO_JSON)
     load_questions.clear()
 
-def _registrar_historial():
+def _registrar_historial(omitir_no_respondidas=False):
     """Registra el examen recién terminado en el historial de fallos.
 
     Cualquier no acierto (incorrecta, parcial o no respondida) suma un fallo
     por pregunta. Se llama una sola vez por examen (Finalizar, timeout del
     timer o fallback de resultados): el flag de sesión evita dobles registros
     cuando el timeout y el cálculo de resultados coinciden en el mismo rerun.
+
+    omitir_no_respondidas=True solo en la entrega anticipada a voluntad del
+    usuario (botón Terminar examen): al no haberlas intentado, no son fallo.
     """
     if st.session_state.get("historial_examen_registrado", False):
         return
@@ -773,6 +776,7 @@ def _registrar_historial():
             historial,
             st.session_state.preguntas_simulador,
             st.session_state.respuestas_usuario,
+            omitir_no_respondidas=omitir_no_respondidas,
         )
         guardar_historial(ARCHIVO_HISTORIAL, historial)
     except (OSError, KeyError):
@@ -2727,6 +2731,38 @@ elif pestana_seleccionada == "🎮 Simulador":
                             )
                             st.session_state.mostrar_resultados = True
                             _registrar_historial()
+                        st.rerun()
+            
+            # --- ENTREGA ANTICIPADA ---
+            # Terminar el examen desde cualquier pregunta: el reporte se
+            # calcula sin contar las no respondidas como erróneas y sin
+            # registrarlas como fallo en el historial (no se intentaron).
+            if not st.session_state.get("confirmar_terminar_examen", False):
+                if st.button("🏁 Terminar examen", use_container_width=True):
+                    st.session_state.confirmar_terminar_examen = True
+                    st.rerun()
+            else:
+                sin_responder = total - len(st.session_state.respuestas_usuario)
+                st.warning(
+                    f"Te quedan **{sin_responder}** pregunta(s) sin responder. "
+                    "Al terminar ahora, las no respondidas **NO** cuentan como erróneas."
+                )
+                col_si, col_no = st.columns(2)
+                with col_si:
+                    if st.button("✅ Sí, terminar", type="primary", use_container_width=True):
+                        with st.spinner("📊 Calculando tus resultados finales..."):
+                            st.session_state.resultado_final = calcular_resultado(
+                                st.session_state.preguntas_simulador,
+                                st.session_state.respuestas_usuario,
+                                contar_no_respondidas_como_incorrectas=False,
+                            )
+                            st.session_state.mostrar_resultados = True
+                            _registrar_historial(omitir_no_respondidas=True)
+                        st.session_state.confirmar_terminar_examen = False
+                        st.rerun()
+                with col_no:
+                    if st.button("✏️ Seguir contestando", use_container_width=True):
+                        st.session_state.confirmar_terminar_examen = False
                         st.rerun()
 
 # ========================================

@@ -49,12 +49,17 @@ def clasificar_intento(pregunta, respuesta):
     return "correcta" if set(resp) == correctas else "fallo"
 
 
-def registrar_examen(historial, preguntas_simulador, respuestas_usuario, fecha=None):
+def registrar_examen(historial, preguntas_simulador, respuestas_usuario, fecha=None,
+                     omitir_no_respondidas=False):
     """Devuelve un historial nuevo con el examen registrado.
 
     Añade un evento por pregunta (fecha + resultado). El snapshot (enunciado,
     tag, id, correctas) se refresca en cada registro, así las ediciones del
     banco se reflejan sin duplicar claves. 'historial' no se muta.
+
+    Con omitir_no_respondidas=True (entrega anticipada a voluntad del usuario)
+    las preguntas sin respuesta no generan evento: al no haberse intentado no
+    son un fallo. El timeout del timer y la entrega normal sí las cuentan.
     """
     fecha_evento = (fecha or datetime.now()).strftime(FORMATO_FECHA)
     nuevo = {
@@ -66,7 +71,10 @@ def registrar_examen(historial, preguntas_simulador, respuestas_usuario, fecha=N
         },
     }
     for i, pregunta in enumerate(preguntas_simulador or []):
-        resultado = clasificar_intento(pregunta, respuestas_usuario.get(i, []))
+        respuesta = respuestas_usuario.get(i, [])
+        if omitir_no_respondidas and not respuesta:
+            continue
+        resultado = clasificar_intento(pregunta, respuesta)
         clave = clave_pregunta(pregunta)
         datos = nuevo["preguntas"].setdefault(
             clave,
