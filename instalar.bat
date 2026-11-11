@@ -38,6 +38,10 @@ if not exist ".venv\Scripts\python.exe" (
     )
 )
 
+REM El marcador .instalacion_ok solo existe si las dependencias terminaron de
+REM instalarse: detecta venvs a medias (pip interrumpido, red caida, etc.)
+del /Q ".venv\.instalacion_ok" 2>nul
+
 echo [2/3] Instalando dependencias (puede tardar unos minutos)...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip -q
 if errorlevel 1 (
@@ -53,6 +57,8 @@ if errorlevel 1 (
     if "%~1"=="" pause
     exit /b 1
 )
+
+type nul > ".venv\.instalacion_ok"
 
 echo.
 echo [3/3] Instalacion completada.

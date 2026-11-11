@@ -58,6 +58,11 @@ check("duplicados y vacíos se eliminan",
       filtrar_modelos_ocr(dup) == ["gemini-3.8-flash"],
       f"-> {filtrar_modelos_ocr(dup)}")
 
+check("ordena versiones por número (3.10 es más nuevo que 3.9)",
+      filtrar_modelos_ocr(["models/gemini-3.9-flash", "models/gemini-3.10-flash"])
+      == ["gemini-3.10-flash", "gemini-3.9-flash"],
+      f"-> {filtrar_modelos_ocr(['models/gemini-3.9-flash', 'models/gemini-3.10-flash'])}")
+
 check("lista vacía devuelve lista vacía", filtrar_modelos_ocr([]) == [])
 
 print("\n== modelo_ocr_preferido ==")
@@ -82,6 +87,11 @@ check("detecta el 404 real de modelo retirado",
       es_error_modelo_no_disponible(error_real))
 check("detecta 'model is not found'",
       es_error_modelo_no_disponible("400 INVALID_ARGUMENT: model is not found"))
+check("sin contexto de modelo no se clasifica como modelo no disponible",
+      not es_error_modelo_no_disponible("404 NOT_FOUND: resource not found"))
+check("un 429 que menciona 404 en sus metadatos sigue siendo cuota",
+      not es_error_modelo_no_disponible(
+          "429 RESOURCE_EXHAUSTED: quota exceeded for model gemini-2.5-flash, retry in 404 seconds"))
 check("no confunde un 429 de cuota",
       not es_error_modelo_no_disponible("429 RESOURCE_EXHAUSTED: quota exceeded"))
 check("no confunde un error interno",

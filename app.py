@@ -919,22 +919,6 @@ def extract_text_from_image(image_path, api_key, modelo=MODELO_OCR_PREDEFINIDO, 
         except Exception as e:
             error_str = str(e)
             
-            if es_error_modelo_no_disponible(error_str):
-                # Sin reintentos: el modelo no existe para esta cuenta y
-                # volver a llamar devuelve el mismo 404.
-                return {
-                    "error": "modelo_no_disponible",
-                    "mensaje": f"""⚠️ **Modelo no disponible**
-
-El modelo `{modelo}` no está disponible para tu API Key (Google retira
-modelos para usuarios nuevos aunque sigan activos en cuentas antiguas).
-
-**Solución:** en **⚙️ Modelo** elige otro de la lista (por ejemplo
-`gemini-3.8-flash`) y vuelve a procesar la imagen.
-                    """.strip(),
-                    "detalle": error_str,
-                }
-            
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
                 retry_match = re.search(r'retry in (\d+(?:\.\d+)?)', error_str)
                 wait_seconds = int(float(retry_match.group(1))) if retry_match else 30
@@ -950,6 +934,22 @@ Has excedido los límites gratuitos de Google Gemini.
 2. 🔑 Crea una nueva API Key: https://makersuite.google.com/app/apikey
 3. ✍️ Usa la pestaña "Ingesta Manual"
                     """.strip()
+                }
+            
+            if es_error_modelo_no_disponible(error_str):
+                # Sin reintentos: el modelo no existe para esta cuenta y
+                # volver a llamar devuelve el mismo 404.
+                return {
+                    "error": "modelo_no_disponible",
+                    "mensaje": f"""⚠️ **Modelo no disponible**
+
+El modelo `{modelo}` no está disponible para tu API Key (Google retira
+modelos para usuarios nuevos aunque sigan activos en cuentas antiguas).
+
+**Solución:** en **⚙️ Modelo** elige otro de la lista (por ejemplo
+`{MODELO_OCR_PREDEFINIDO}`) y vuelve a procesar la imagen.
+                    """.strip(),
+                    "detalle": error_str,
                 }
             
             if intento < max_retries - 1:

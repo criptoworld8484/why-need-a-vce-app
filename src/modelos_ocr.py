@@ -8,6 +8,8 @@ se consulta a la API con la key del usuario y solo se recurre a una lista de
 reserva cuando la consulta no es posible.
 """
 
+import re
+
 MODELO_OCR_PREDEFINIDO = "gemini-3.8-flash"
 
 # Usada solo cuando no se puede consultar la API (sin key, sin red...).
@@ -42,6 +44,17 @@ _INDIOS_MODELO_NO_DISPONIBLE = (
     "404", "not_found", "not found", "no longer available", "does not exist",
 )
 
+# Un error de cuota nunca es 'modelo no disponible', aunque su texto mencione
+# 404 o 'not found' (p. ej. en metadatos o pistas de reintento).
+_INDIOS_CUOTA = ("429", "resource_exhausted", "quota")
+
+
+def _clave_version(nombre):
+    """Clave de orden natural: los bloques numéricos comparan como números
+    (gemini-3.10-flash va después de gemini-3.9-flash)."""
+    partes = re.split(r"(\d+)", nombre.lower())
+    return [(1, int(p)) if p.isdigit() else (0, p) for p in partes]
+
 
 def filtrar_modelos_ocr(nombres):
     """Normaliza nombres crudos de la API a IDs aptos para OCR.
@@ -64,7 +77,7 @@ def filtrar_modelos_ocr(nombres):
             continue
         if nombre not in limpios:
             limpios.append(nombre)
-    return sorted(limpios, reverse=True)
+    return sorted(limpios, key=_clave_version, reverse=True)
 
 
 def modelo_ocr_preferido(nombres):
@@ -82,8 +95,17 @@ def modelo_ocr_preferido(nombres):
 
 
 def es_error_modelo_no_disponible(texto_error):
-    """Detecta si un error de la API significa 'modelo no disponible'."""
+    """Detecta si un error de la API significa 'modelo no disponible'.
+
+    Exige contexto de modelo en el texto y un indicio de disponibilidad, y
+    descarta de plano los errores de cuota: un 404 o un 'not found' genérico
+    sin mención de modelo no cuenta, para no secuestrar la vía de reintentos.
+    """
     bajo = str(texto_error or "").lower()
+    if any(cuota in bajo for cuota in _INDIOS_CUOTA):
+        return False
+    if "model" not in bajo and "modelo" not in bajo:
+        return False
     return any(indicio in bajo for indicio in _INDIOS_MODELO_NO_DISPONIBLE)
 
 

@@ -31,13 +31,16 @@ ESTE_ARCHIVO = os.path.basename(__file__)
 
 
 def _archivos_del_repo():
-    for dirpath, dirnames, nombres in os.walk(REPO):
-        dirnames[:] = [d for d in dirnames if d not in OMITIR_DIRS]
-        for nombre in nombres:
-            if nombre == ESTE_ARCHIVO:
-                continue
-            if nombre.endswith(EXTENSIONES):
-                yield os.path.join(dirpath, nombre)
+    """Solo archivos trackeados: el veredicto debe depender del repo, no del
+    estado local del worktree (restos de builds, scratch, etc.)."""
+    import subprocess
+    salida = subprocess.run(["git", "-C", REPO, "ls-files"],
+                            capture_output=True, text=True, check=True)
+    for relativo in salida.stdout.splitlines():
+        if os.path.basename(relativo) == ESTE_ARCHIVO:
+            continue
+        if relativo.endswith(EXTENSIONES):
+            yield os.path.join(REPO, relativo)
 
 
 print("== referencias a los scripts eliminados ==")
@@ -62,12 +65,19 @@ for bat in ("instalar.bat", "iniciar.bat"):
     contenido = re.sub(r"https?://\S+", "", contenido)
     contenido = contenido.replace("%~dp0", "")
     referencias = set(re.findall(r"[\w.-]+\.(?:bat|txt|py)", contenido))
-    # .venv se crea en runtime; python/pip son binarios, no ficheros del repo
-    referencias -= {"python.exe"}
     faltantes = [r for r in sorted(referencias)
                  if not os.path.exists(os.path.join(REPO, r))]
     check(f"{bat} solo referencia ficheros existentes",
           not faltantes, f"-> faltan: {faltantes}")
+
+print("\n== comandos de test documentados en CLAUDE.md ==")
+with open(os.path.join(REPO, "CLAUDE.md"), encoding="utf-8") as f:
+    documentacion = f.read()
+comandos_doc = re.findall(r"python (tests/[\w.]+\.py)", documentacion)
+faltan_docs = [c for c in comandos_doc if not os.path.exists(os.path.join(REPO, c))]
+check("todo comando de test documentado resuelve a un archivo real",
+      bool(comandos_doc) and not faltan_docs,
+      f"-> documentados: {len(comandos_doc)}, rotos: {faltan_docs}")
 
 print("\n" + ("TODOS OK" if not fallos else f"{len(fallos)} FALLOS: {fallos}"))
 sys.exit(1 if fallos else 0)
