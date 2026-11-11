@@ -2040,6 +2040,7 @@ elif pestana_seleccionada == "🎮 Simulador":
                     st.session_state.tiempo_inicio = time.time()
                     st.session_state.timer_activo = (modo_examen == "Examen")
                     st.session_state.respuestas_reveladas = set()
+                    st.session_state.reporte_solo_respondidas = False
                 st.rerun()
         
         # ========================================
@@ -2123,10 +2124,18 @@ elif pestana_seleccionada == "🎮 Simulador":
             
             # Preparar lista filtrada
             preguntas_revision = []
+            omitidas = 0
+            solo_respondidas = st.session_state.get("reporte_solo_respondidas", False)
             for i, preg in enumerate(st.session_state.preguntas_simulador):
                 resp_usuario = st.session_state.respuestas_usuario.get(i, [])
                 if not isinstance(resp_usuario, list):
                     resp_usuario = [resp_usuario] if resp_usuario else []
+                
+                # En la entrega anticipada el usuario pidió revisar solo lo
+                # que contestó: las no respondidas no se listan.
+                if solo_respondidas and not resp_usuario:
+                    omitidas += 1
+                    continue
                 
                 correctas_preg = set(preg["correctas"])
                 respuestas_set = set(resp_usuario)
@@ -2146,6 +2155,10 @@ elif pestana_seleccionada == "🎮 Simulador":
                     preguntas_revision.append((i, preg, resp_usuario, estado))
                 elif filtro == "Solo parciales" and estado == "parcial":
                     preguntas_revision.append((i, preg, resp_usuario, estado))
+            
+            if solo_respondidas and omitidas:
+                st.caption(f"⬜ {omitidas} pregunta(s) sin responder no se muestran "
+                           "(entrega anticipada).")
             
             if not preguntas_revision:
                 st.info(f"ℹ️ No hay preguntas con el filtro '{filtro}'")
@@ -2700,17 +2713,6 @@ elif pestana_seleccionada == "🎮 Simulador":
             # flecha izquierda = Anterior. Ver src/atajos_teclado.py.
             inyectar_atajos()
             
-            # --- VER RESPUESTA CORRECTA ---
-            # Disponible en ambos modos a petición del usuario (estilo
-            # estudio): revela la letra correcta sin afectar al marcador.
-            reveladas = st.session_state.setdefault("respuestas_reveladas", set())
-            if idx not in reveladas:
-                if st.button("👁️ Ver respuesta correcta", use_container_width=True):
-                    reveladas.add(idx)
-                    st.rerun()
-            else:
-                st.success(f"👁️ Respuesta correcta: **{', '.join(preg['correctas'])}**")
-            
             st.markdown("---")
             
             # Botones de navegación (estos SÍ pueden estar en un form o como botones normales)
@@ -2751,37 +2753,58 @@ elif pestana_seleccionada == "🎮 Simulador":
                             _registrar_historial()
                         st.rerun()
             
-            # --- ENTREGA ANTICIPADA ---
-            # Terminar el examen desde cualquier pregunta: el reporte se
-            # calcula sin contar las no respondidas como erróneas y sin
-            # registrarlas como fallo en el historial (no se intentaron).
-            if not st.session_state.get("confirmar_terminar_examen", False):
-                if st.button("🏁 Terminar examen", use_container_width=True):
-                    st.session_state.confirmar_terminar_examen = True
-                    st.rerun()
-            else:
-                sin_responder = total - len(st.session_state.respuestas_usuario)
-                st.warning(
-                    f"Te quedan **{sin_responder}** pregunta(s) sin responder. "
-                    "Al terminar ahora, las no respondidas **NO** cuentan como erróneas."
-                )
-                col_si, col_no = st.columns(2)
-                with col_si:
-                    if st.button("✅ Sí, terminar", type="primary", use_container_width=True):
-                        with st.spinner("📊 Calculando tus resultados finales..."):
-                            st.session_state.resultado_final = calcular_resultado(
-                                st.session_state.preguntas_simulador,
-                                st.session_state.respuestas_usuario,
-                                contar_no_respondidas_como_incorrectas=False,
-                            )
-                            st.session_state.mostrar_resultados = True
-                            _registrar_historial(omitir_no_respondidas=True)
-                        st.session_state.confirmar_terminar_examen = False
-                        st.rerun()
-                with col_no:
-                    if st.button("✏️ Seguir contestando", use_container_width=True):
-                        st.session_state.confirmar_terminar_examen = False
-                        st.rerun()
+            # --- OPCIONES SECUNDARIAS ---
+            # Contenedor aparte de la navegación principal (Siguiente /
+            # Anterior) para que no se confundan con las acciones principales.
+            with st.container(border=True):
+                st.caption("⚙️ Opciones del examen")
+                col_op1, col_op2 = st.columns(2)
+                
+                with col_op1:
+                    # Ver respuesta correcta: disponible en ambos modos a
+                    # petición del usuario (estudio). No afecta al marcador.
+                    reveladas = st.session_state.setdefault("respuestas_reveladas", set())
+                    if idx not in reveladas:
+                        if st.button("👁️ Ver respuesta correcta", use_container_width=True):
+                            reveladas.add(idx)
+                            st.rerun()
+                    else:
+                        st.success(f"👁️ Correcta: **{', '.join(preg['correctas'])}**")
+                
+                with col_op2:
+                    # Entrega anticipada: el reporte se calcula sin contar las
+                    # no respondidas como erróneas y sin registrarlas como
+                    # fallo en el historial (no se intentaron).
+                    if not st.session_state.get("confirmar_terminar_examen", False):
+                        if st.button("🏁 Terminar examen", use_container_width=True):
+                            st.session_state.confirmar_terminar_examen = True
+                            st.rerun()
+                    else:
+                        sin_responder = total - len(st.session_state.respuestas_usuario)
+                        st.warning(
+                            f"Te quedan **{sin_responder}** sin responder. "
+                            "Al terminar ahora **no** cuentan como erróneas."
+                        )
+                
+                if st.session_state.get("confirmar_terminar_examen", False):
+                    col_si, col_no = st.columns(2)
+                    with col_si:
+                        if st.button("✅ Sí, terminar", type="primary", use_container_width=True):
+                            with st.spinner("📊 Calculando tus resultados finales..."):
+                                st.session_state.resultado_final = calcular_resultado(
+                                    st.session_state.preguntas_simulador,
+                                    st.session_state.respuestas_usuario,
+                                    contar_no_respondidas_como_incorrectas=False,
+                                )
+                                st.session_state.mostrar_resultados = True
+                                st.session_state.reporte_solo_respondidas = True
+                                _registrar_historial(omitir_no_respondidas=True)
+                            st.session_state.confirmar_terminar_examen = False
+                            st.rerun()
+                    with col_no:
+                        if st.button("✏️ Seguir contestando", use_container_width=True):
+                            st.session_state.confirmar_terminar_examen = False
+                            st.rerun()
 
 # ========================================
 # PESTAÑA 5: SECCIÓN ERRORES REITERADOS

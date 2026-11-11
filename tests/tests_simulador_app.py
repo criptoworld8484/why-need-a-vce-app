@@ -148,5 +148,16 @@ check("revelado tambien en modo Examen",
       and any(preg0c["correctas"][0] in (s.value or "") for s in at3.success))
 check("sin excepciones en modo Examen", not at3.exception)
 
+print("\n== Reporte de entrega anticipada: solo contestadas ==")
+import re as _re
+cabeceras = [m.value for m in at.markdown
+             if getattr(m, "value", None)
+             and _re.search(r"Pregunta \d+ - (CORRECTA|INCORRECTA|PARCIAL)", m.value)]
+check("el reporte lista solo la pregunta contestada",
+      len(cabeceras) == 1 and "Pregunta 1 -" in cabeceras[0], f"-> {cabeceras}")
+check("avisa de las preguntas omitidas",
+      any("no se muestran" in (getattr(m, "value", None) or "")
+          for m in list(at.markdown) + list(getattr(at, "caption", []))))
+
 print("\n" + ("TODOS OK" if not fallos else f"{len(fallos)} FALLOS: {fallos}"))
 sys.exit(1 if fallos else 0)
