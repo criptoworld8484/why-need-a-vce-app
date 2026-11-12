@@ -3,6 +3,11 @@ chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
+REM --auto (lo pasa iniciar.bat): termina sin pausas para poder invocarlo
+REM desde otro script. Cualquier otro argumento no cambia el comportamiento.
+set "AUTO=0"
+if /I "%~1"=="--auto" set "AUTO=1"
+
 echo ============================================
 echo   MyVCE - Instalacion
 echo ============================================
@@ -24,7 +29,7 @@ if not defined PY (
     echo      "Add python.exe to PATH"
     echo   3. Vuelve a ejecutar instalar.bat
     echo.
-    if "%~1"=="" pause
+    if "%AUTO%"=="0" pause
     exit /b 1
 )
 
@@ -33,7 +38,7 @@ if not exist ".venv\Scripts\python.exe" (
     %PY% -m venv .venv
     if errorlevel 1 (
         echo [ERROR] No se pudo crear el entorno virtual .venv
-        if "%~1"=="" pause
+        if "%AUTO%"=="0" pause
         exit /b 1
     )
 )
@@ -47,14 +52,14 @@ echo [2/3] Instalando dependencias (puede tardar unos minutos)...
 if errorlevel 1 (
     echo [ERROR] Fallo la actualizacion de pip.
     echo Revisa tu conexion a internet y vuelve a ejecutar instalar.bat
-    if "%~1"=="" pause
+    if "%AUTO%"=="0" pause
     exit /b 1
 )
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 (
     echo [ERROR] Fallo la instalacion de dependencias.
     echo Revisa tu conexion a internet y vuelve a ejecutar instalar.bat
-    if "%~1"=="" pause
+    if "%AUTO%"=="0" pause
     exit /b 1
 )
 
@@ -65,5 +70,5 @@ echo [3/3] Instalacion completada.
 echo.
 echo Para usar la aplicacion haz doble clic en iniciar.bat
 echo.
-if "%~1"=="" pause
+if "%AUTO%"=="0" pause
 exit /b 0
