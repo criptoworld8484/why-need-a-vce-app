@@ -39,3 +39,6 @@ app.py.backup
 .streamlit/*
 !.streamlit/config.toml
 *.streamlit_cache
+
+# Herramientas de agentes (cache local)
+.atl/

@@ -12,7 +12,7 @@ import sys
 import tempfile
 import time
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 
 tmp_home = tempfile.mkdtemp(prefix="vce_test_fase1_")

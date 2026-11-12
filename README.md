@@ -1,12 +1,20 @@
 # Why need a VCE app?
 
-Simulador de exámenes de certificación con Streamlit.
+Simulador de exámenes de certificación con Streamlit: banco de preguntas con imágenes, extracción OCR con Google Gemini, modo práctica y modo examen con temporizador.
 
 ---
 
-## Ejecución Rápida
+## Instalación en Windows
 
-### Linux/macOS
+1. **Instala Python 3.10 o superior** desde [python.org/downloads](https://www.python.org/downloads/).
+   > ⚠️ Durante la instalación, marca la casilla **"Add python.exe to PATH"**.
+2. **Descarga el proyecto**: en GitHub, botón **Code → Download ZIP**, y descomprímelo en la carpeta que quieras.
+3. **Haz doble clic en `instalar.bat`** — solo la primera vez. Instala las dependencias en una carpeta `.venv` (unos minutos).
+4. **Haz doble clic en `iniciar.bat`** — la aplicación se abre sola en tu navegador en <http://localhost:8502>.
+
+Para usar la app a partir de ahora, solo necesitas el paso 4. Para actualizar a una versión más nueva: descarga el ZIP de nuevo, pisa la carpeta (tus datos NO se pierden) y ejecuta `instalar.bat`.
+
+## Instalación en Linux/macOS
 
 ```bash
 cd MyVCE_Funcional
@@ -14,128 +22,73 @@ pip install -r requirements.txt
 python -m streamlit run app.py --server.port 8502
 ```
 
-### Windows
-
-```cmd
-cd MyVCE_Funcional
-pip install -r requirements.txt
-python -m streamlit run app.py --server.port 8502
-```
-
-La aplicación se abrirá en: http://localhost:8502
-
 ---
 
-## Requisitos
+## Primer uso
 
-- **Python 3.10+**
-- **Streamlit 1.54+** (para timer optimizado)
-- **Google Gemini API Key** (opcional, para OCR)
+Al abrir la app por primera vez aparece un asistente:
 
-### Dependencias
-
-```
-streamlit>=1.54.0
-streamlit-autorefresh>=1.0.0
-google-genai>=1.0.0
-Pillow>=10.0.0
-opencv-python>=4.8.0
-numpy>=1.24.0
-cryptography>=41.0.0
-```
-
-**Nota:** Se requiere Streamlit 1.54+ para mejor rendimiento del timer (soporte nativo de fragments).
+- **Pega tu API Key de Google Gemini** ([aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)) para habilitar el OCR, **o**
+- pulsa **"Continuar sin OCR"** — la app es 100 % funcional sin ella; el OCR es opcional.
 
 ---
 
 ## Características
 
-### 1. Ingesta Manual
-- Añadir preguntas directamente desde el formulario
-- Soporte para imágenes adjuntas
-- Multiple choice con hasta 6 opciones
-- Soporte para preguntas de respuesta múltiple
-- Tags para agrupar preguntas por vendor/categoría
-
-### 2. Extracción OCR con Gemini
-- Extraer preguntas desde imágenes usando Google Gemini
-- Procesamiento automático de imágenes
-- Validación de preguntas extraídas
-- Asignación de tags al importar
-
-### 3. Base de Datos de Preguntas
-- Ver todas las preguntas disponibles
-- Filtrar por tag y texto
-- Editar tags inline y eliminar preguntas
-- Importar/Exportar en formato ZIP (incluye imágenes)
-
-### 4. Simulador de Examen
-- **Modo Práctica**: Sin límite de tiempo, feedback inmediato
-- **Modo Examen**: Temporizador configurable, evaluación final
-- Filtrado por tags y rango ordinal
-- Orden aleatorio por defecto
-- Navegación entre preguntas
-- Seguimiento de progreso
-- Timer en tiempo real con cuenta regresiva
+| Pestaña | Qué hace |
+|---|---|
+| ✍️ Ingesta Manual | Añadir preguntas con imágenes, hasta 6 opciones, respuesta múltiple y tags |
+| 📸 Extracción OCR | Extraer preguntas desde capturas de pantalla con Gemini, revisar y guardar |
+| 📊 Ver Preguntas | Buscar, filtrar por tag, editar y eliminar; importar/exportar en ZIP |
+| 🎮 Simulador | Modo Práctica (sin tiempo, feedback inmediato) y Modo Examen (temporizador, evaluación final). Puedes terminar cuando quieras, ver la opción correcta y navegar con el teclado (`Enter`/`→` avanzan, `←` vuelve) |
+| 🔁 Errores Reiterados | Preguntas falladas en varios exámenes y test de práctica con ellas |
 
 ---
 
-## Configurar API Key de Gemini (Opcional)
+## Dónde se guardan tus datos
 
-Para usar la función de OCR:
+| Carpeta | Contenido |
+|---|---|
+| `%APPDATA%\WhyNeedAVCEApp` (Windows) · `~/.local/share/WhyNeedAVCEApp` (Linux/macOS) | Banco de preguntas, historial de exámenes, imágenes |
+| `%APPDATA%` (Windows) · `~/.config/WhyNeedAVCEApp` (Linux/macOS) | API Key cifrada (`gemini_key.enc`) |
 
-1. Ir a: https://makersuite.google.com/app/apikey
-2. Crear una API Key de Google Gemini
-3. En la app, ingresar la clave cuando lo solicite
+Tus datos **no** están dentro de la carpeta del proyecto: puedes borrarla o actualizarla sin perderlos. Para desinstalar por completo, borra la carpeta del proyecto y las carpetas de datos de la tabla.
 
 ---
 
-## Estructura del Proyecto
+## Estructura del proyecto
 
 ```
 MyVCE_Funcional/
-├── app.py                    # Código fuente principal
-├── requirements.txt          # Dependencias de Python
-├── README.md                 # Esta documentación
-├── src/                      # Módulos auxiliares
-│   ├── paths.py              # Gestión de rutas
-│   ├── api_key_manager.py    # Almacenamiento seguro de API keys
-│   └── __init__.py
-└── build/                    # Scripts de compilación
+├── app.py                 # Aplicación principal (Streamlit)
+├── instalar.bat           # Instalación en Windows (una sola vez)
+├── iniciar.bat            # Arranque en Windows
+├── requirements.txt       # Dependencias de Python
+├── src/                   # Módulos auxiliares (datos, examen, OCR, backup...)
+├── tests/                 # Suite de tests (scripts Python ejecutables)
+└── .streamlit/            # Configuración de Streamlit
 ```
 
 ---
 
-## Solución de Problemas
+## Solución de problemas
 
-### "Puerto en uso"
-- La app usará automáticamente otro puerto disponible
-- Especificar puerto: `python -m streamlit run app.py --server.port 8503`
-
-### Error al cargar imágenes
-- Las imágenes deben estar en formato PNG, JPG o JPEG
-
-### Timer no actualiza
-- El timer usa `streamlit-autorefresh` para actualizarse cada segundo
-- Verificar que el paquete está instalado: `pip install streamlit-autorefresh`
+- **`'python' no se reconoce`** → reinstala Python marcando la casilla *"Add python.exe to PATH"* (o desinstala primero la versión de la Microsoft Store si Windows la abrió al escribir `python`).
+- **El puerto 8502 está ocupado** → Streamlit avisa en la terminal y usa otro puerto automáticamente; o edita `--server.port` en `iniciar.bat`.
+- **El OCR dice "Modelo no disponible"** → en la pestaña OCR, dentro de **⚙️ Modelo**, elige otro de la lista. La disponibilidad depende de tu cuenta de Google (retira modelos antiguos para usuarios nuevos).
+- **La app no arranca tras instalar** → vuelve a ejecutar `instalar.bat`; si persiste, borra la carpeta `.venv` y repite la instalación.
 
 ---
 
 ## Desarrollo
 
-### Ejecutar en modo desarrollo
 ```bash
-python -m streamlit run app.py --server.port 8502 --server.reload true
+python -m streamlit run app.py --server.port 8502   # servidor de desarrollo
 ```
 
-### Compilar para distribución
+Los tests son scripts Python directos (sin pytest):
 
-**Windows:**
-```batch
-build\build_windows.bat
-```
-
-**Linux:**
 ```bash
-build/build_linux.sh
+for f in tests/*.py; do python "$f"; done           # Linux/macOS
+for %f in (tests\*.py) do python "%f"               # Windows (cmd)
 ```

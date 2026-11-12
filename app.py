@@ -25,6 +25,10 @@ from src.historial import (cargar_historial, clave_pregunta, guardar_historial,
                            historial_vacio, registrar_examen,
                            resumen_reiteradas)
 from src.backup import export_questions_to_zip, import_questions_from_zip
+from src.modelos_ocr import (MODELO_OCR_PREDEFINIDO, MODELOS_OCR_RESERVA,
+                             es_error_modelo_no_disponible, listar_modelos_ocr,
+                             modelo_ocr_preferido)
+from src.atajos_teclado import capturar_tecla
 
 # ✅ CONFIGURACIÓN PROTEGIDA DE OPENCV
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "0"
@@ -38,12 +42,7 @@ try:
 except Exception:
     OPENCV_AVAILABLE = False
 
-try:
-    from google import genai
-    from google.genai import types
-    GENAI_AVAILABLE = True
-except Exception:
-    GENAI_AVAILABLE = False
+from src.ocr import GENAI_AVAILABLE, extract_text_from_image
 
 try:
     from streamlit_autorefresh import st_autorefresh
@@ -754,13 +753,16 @@ def save_questions(preguntas_actualizadas):
     os.replace(tmp_path, ARCHIVO_JSON)
     load_questions.clear()
 
-def _registrar_historial():
+def _registrar_historial(omitir_no_respondidas=False):
     """Registra el examen recién terminado en el historial de fallos.
 
     Cualquier no acierto (incorrecta, parcial o no respondida) suma un fallo
     por pregunta. Se llama una sola vez por examen (Finalizar, timeout del
     timer o fallback de resultados): el flag de sesión evita dobles registros
     cuando el timeout y el cálculo de resultados coinciden en el mismo rerun.
+
+    omitir_no_respondidas=True solo en la entrega anticipada a voluntad del
+    usuario (botón Terminar examen): al no haberlas intentado, no son fallo.
     """
     if st.session_state.get("historial_examen_registrado", False):
         return
@@ -770,6 +772,7 @@ def _registrar_historial():
             historial,
             st.session_state.preguntas_simulador,
             st.session_state.respuestas_usuario,
+            omitir_no_respondidas=omitir_no_respondidas,
         )
         guardar_historial(ARCHIVO_HISTORIAL, historial)
     except (OSError, KeyError):
@@ -821,125 +824,6 @@ def aleatorizar_pregunta(pregunta):
     pregunta_aleatoria["correctas"] = nuevas_correctas
     
     return pregunta_aleatoria
-
-# --- FUNCIÓN OCR ---
-def extract_text_from_image(image_path, api_key, modelo="gemini-2.5-flash", max_retries=2):
-    if not GENAI_AVAILABLE:
-        return {"error": "google.genai no está instalado. Ejecuta: pip install google-genai"}
-    
-    for intento in range(max_retries):
-        try:
-            client = genai.Client(api_key=api_key)
-            
-            img = Image.open(image_path)
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-            
-            import io
-            img_byte_arr = io.BytesIO()
-            img.save(img_byte_arr, format='JPEG', quality=95)
-            img_bytes = img_byte_arr.getvalue()
-            
-            prompt = """
-            Eres un asistente experto en analizar capturas de pantalla de exámenes de certificación.
-            Extrae el texto de la imagen y devuélvelo ESTRICTAMENTE en este formato JSON:
-            {
-                "pregunta": "Aquí el texto de la pregunta completa",
-                "respuestas": [
-                    "A) texto de la primera opción (usa \\n para saltos de línea si la opción tiene múltiples líneas)",
-                    "B) texto de la segunda opción",
-                    ...
-                ]
-            }
-            
-            IMPORTANTE:
-            - Si una opción tiene múltiples líneas (código, listas, texto largo), preserva el formato usando \\n
-            - Ignora cualquier texto de interfaz (botones, logos, horas, etc.)
-            - Si no hay opciones de respuesta, deja la lista "respuestas" vacía
-            - Devuelve SOLO el JSON válido, sin markdown
-            """
-            
-            response = client.models.generate_content(
-                model=modelo,
-                contents=[
-                    prompt,
-                    types.Part.from_bytes(
-                        data=img_bytes,
-                        mime_type='image/jpeg'
-                    )
-                ]
-            )
-            
-            if not response or not response.text:
-                return {"error": "Gemini no devolvió contenido."}
-            
-            texto_limpio = response.text.strip()
-            
-            # Limpiar marcas de markdown
-            if texto_limpio.startswith("```json"):
-                texto_limpio = texto_limpio[7:].rstrip("```").strip()
-            elif texto_limpio.startswith("```"):
-                texto_limpio = texto_limpio[3:].rstrip("```").strip()
-            
-            # Validar que no esté vacío después de limpiar
-            if not texto_limpio:
-                return {"error": "La respuesta está vacía después de procesar."}
-            
-            try:
-                data = json.loads(texto_limpio)
-            except json.JSONDecodeError:
-                return {"error": f"JSON inválido. La respuesta no es un JSON válido."}
-            
-            # Validar estructura del JSON
-            if not isinstance(data, dict):
-                return {"error": "JSON inválido: la raíz debe ser un objeto."}
-            
-            if "pregunta" not in data:
-                return {"error": "JSON inválido: falta el campo 'pregunta'."}
-            
-            if "respuestas" not in data:
-                return {"error": "JSON inválido: falta el campo 'respuestas'."}
-            
-            # Validar tipos
-            if not isinstance(data.get("pregunta"), str):
-                return {"error": "JSON inválido: 'pregunta' debe ser texto."}
-            
-            if not isinstance(data.get("respuestas"), list):
-                return {"error": "JSON inválido: 'respuestas' debe ser una lista."}
-                
-            return data
-            
-        except json.JSONDecodeError as e:
-            texto_error = response.text[:200] if response and hasattr(response, 'text') else 'Sin respuesta'
-            return {"error": f"Error al parsear JSON: {str(e)}\n\nRespuesta: {texto_error}..."}
-        
-        except Exception as e:
-            error_str = str(e)
-            
-            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
-                retry_match = re.search(r'retry in (\d+(?:\.\d+)?)', error_str)
-                wait_seconds = int(float(retry_match.group(1))) if retry_match else 30
-                
-                return {
-                    "error": "cuota_excedida",
-                    "mensaje": f"""🚫 **Cuota de API agotada**
-
-Has excedido los límites gratuitos de Google Gemini.
-
-**Soluciones:**
-1. ⏳ Espera {wait_seconds} segundos y reintenta
-2. 🔑 Crea una nueva API Key: https://makersuite.google.com/app/apikey
-3. ✍️ Usa la pestaña "Ingesta Manual"
-                    """.strip()
-                }
-            
-            if intento < max_retries - 1:
-                time.sleep(2 ** intento)
-                continue
-            
-            return {"error": f"Error: {str(e)}"}
-    
-    return {"error": "Máximo de reintentos alcanzado"}
 
 # --- FUNCIÓN PARA LIMPIAR FORMULARIO MANUAL ---
 def limpiar_formulario_manual():
@@ -1181,15 +1065,40 @@ elif pestana_seleccionada == "📸 Extracción OCR":
         
         with col_config2:
             with st.expander("⚙️ Modelo", expanded=False):
+                # La disponibilidad de modelos depende de la cuenta de la API
+                # Key (los retirados para usuarios nuevos siguen activos en
+                # cuentas antiguas), así que la lista se consulta a la API y
+                # se cacheia por key con TTL: un fallo transitorio de red no
+                # deja la lista de reserva clavada el resto de la sesión.
+                api_key_ocr_actual = st.session_state.get("api_key_ocr", "")
+                cache_modelos = st.session_state.get("modelos_ocr_cache") or {}
+                if (cache_modelos.get("api_key") != api_key_ocr_actual
+                        or time.time() - cache_modelos.get("ts", 0) > 120):
+                    if api_key_ocr_actual.strip():
+                        modelos_api, motivo_fallo = listar_modelos_ocr(api_key_ocr_actual)
+                    else:
+                        modelos_api, motivo_fallo = None, None
+                    cache_modelos = {
+                        "api_key": api_key_ocr_actual,
+                        "modelos": modelos_api,
+                        "motivo": motivo_fallo,
+                        "ts": time.time(),
+                    }
+                    st.session_state.modelos_ocr_cache = cache_modelos
+                
+                modelos_disponibles = cache_modelos.get("modelos") or MODELOS_OCR_RESERVA
                 modelo_seleccionado = st.selectbox(
                     "Modelo",
-                    options=[
-                        "gemini-2.5-flash",
-                        "gemini-3-flash-preview",
-                        "gemini-3.1-pro-preview"
-                    ],
-                    index=0
+                    options=modelos_disponibles,
+                    index=modelos_disponibles.index(modelo_ocr_preferido(modelos_disponibles))
                 )
+                
+                if cache_modelos.get("modelos") is None and api_key_ocr_actual.strip():
+                    st.caption(f"⚠️ Mostrando la lista habitual: {cache_modelos.get('motivo')}.")
+                
+                if st.button("🔄 Actualizar lista de modelos"):
+                    st.session_state.pop("modelos_ocr_cache", None)
+                    st.rerun()
         
         uploaded_file = st.file_uploader(
             "📤 Sube captura de pantalla",
@@ -1351,6 +1260,11 @@ elif pestana_seleccionada == "📸 Extracción OCR":
                 elif resultado_texto.get("error") == "cuota_excedida":
                     st.error("🚫 Cuota agotada")
                     st.markdown(resultado_texto.get("mensaje", ""))
+                elif resultado_texto.get("error") == "modelo_no_disponible":
+                    st.error("⚠️ Modelo no disponible")
+                    st.markdown(resultado_texto.get("mensaje", ""))
+                    with st.expander("🔧 Detalle técnico"):
+                        st.code(resultado_texto.get("detalle", ""))
                 else:
                     st.error(f"❌ {resultado_texto['error']}")
 
@@ -1995,6 +1909,8 @@ elif pestana_seleccionada == "🎮 Simulador":
                     st.session_state.tiempo_limite = tiempo_minutos * 60
                     st.session_state.tiempo_inicio = time.time()
                     st.session_state.timer_activo = (modo_examen == "Examen")
+                    st.session_state.respuestas_reveladas = set()
+                    st.session_state.reporte_solo_respondidas = False
                 st.rerun()
         
         # ========================================
@@ -2078,10 +1994,18 @@ elif pestana_seleccionada == "🎮 Simulador":
             
             # Preparar lista filtrada
             preguntas_revision = []
+            omitidas = 0
+            solo_respondidas = st.session_state.get("reporte_solo_respondidas", False)
             for i, preg in enumerate(st.session_state.preguntas_simulador):
                 resp_usuario = st.session_state.respuestas_usuario.get(i, [])
                 if not isinstance(resp_usuario, list):
                     resp_usuario = [resp_usuario] if resp_usuario else []
+                
+                # En la entrega anticipada el usuario pidió revisar solo lo
+                # que contestó: las no respondidas no se listan.
+                if solo_respondidas and not resp_usuario:
+                    omitidas += 1
+                    continue
                 
                 correctas_preg = set(preg["correctas"])
                 respuestas_set = set(resp_usuario)
@@ -2101,6 +2025,10 @@ elif pestana_seleccionada == "🎮 Simulador":
                     preguntas_revision.append((i, preg, resp_usuario, estado))
                 elif filtro == "Solo parciales" and estado == "parcial":
                     preguntas_revision.append((i, preg, resp_usuario, estado))
+            
+            if solo_respondidas and omitidas:
+                st.caption(f"⬜ {omitidas} pregunta(s) sin responder no se muestran "
+                           "(entrega anticipada).")
             
             if not preguntas_revision:
                 st.info(f"ℹ️ No hay preguntas con el filtro '{filtro}'")
@@ -2650,6 +2578,48 @@ elif pestana_seleccionada == "🎮 Simulador":
                 if idx in st.session_state.respuestas_usuario:
                     del st.session_state.respuestas_usuario[idx]
             
+            # --- ATAJOS DE TECLADO ---
+            # El componente captura la tecla y la navega Python (sin depender
+            # del DOM de los botones). Enter / flecha derecha = adelante
+            # (Siguiente, o Finalizar en la última); flecha izquierda = atrás.
+            atajo = capturar_tecla()
+            if atajo and atajo.get("ts") != st.session_state.get("atajos_ts"):
+                st.session_state.atajos_ts = atajo["ts"]
+                num_correctas_atajo = len(preg.get("correctas", []))
+                marcadas_atajo = [
+                    op[0] for op in preg["opciones"]
+                    if st.session_state.get(f"opt_{idx}_{op[0]}", False)
+                ]
+                bloqueo_multiple = (
+                    num_correctas_atajo > 1
+                    and len(marcadas_atajo) != num_correctas_atajo
+                )
+                if atajo["tecla"] == "atras":
+                    if idx > 0:
+                        st.session_state.indice_actual -= 1
+                        st.rerun()
+                elif atajo["tecla"] == "adelante":
+                    if idx < total - 1:
+                        if bloqueo_multiple:
+                            st.session_state.aviso_bloqueo_multiple = True
+                            st.rerun()
+                        st.session_state.indice_actual += 1
+                        st.rerun()
+                    else:
+                        # En la última pregunta, Enter/flecha = Finalizar.
+                        if bloqueo_multiple:
+                            st.session_state.aviso_bloqueo_multiple = True
+                            st.rerun()
+                        with st.spinner("📊 Calculando tus resultados finales..."):
+                            st.session_state.resultado_final = calcular_resultado(
+                                st.session_state.preguntas_simulador,
+                                st.session_state.respuestas_usuario,
+                                contar_no_respondidas_como_incorrectas=st.session_state.get("timer_activo", False),
+                            )
+                            st.session_state.mostrar_resultados = True
+                            _registrar_historial()
+                        st.rerun()
+            
             st.markdown("---")
             
             # Botones de navegación (estos SÍ pueden estar en un form o como botones normales)
@@ -2689,6 +2659,59 @@ elif pestana_seleccionada == "🎮 Simulador":
                             st.session_state.mostrar_resultados = True
                             _registrar_historial()
                         st.rerun()
+            
+            # --- OPCIONES SECUNDARIAS ---
+            # Contenedor aparte de la navegación principal (Siguiente /
+            # Anterior) para que no se confundan con las acciones principales.
+            with st.container(border=True):
+                st.caption("⚙️ Opciones del examen")
+                col_op1, col_op2 = st.columns(2)
+                
+                with col_op1:
+                    # Ver respuesta correcta: disponible en ambos modos a
+                    # petición del usuario (estudio). No afecta al marcador.
+                    reveladas = st.session_state.setdefault("respuestas_reveladas", set())
+                    if idx not in reveladas:
+                        if st.button("👁️ Ver respuesta correcta", use_container_width=True):
+                            reveladas.add(idx)
+                            st.rerun()
+                    else:
+                        st.success(f"👁️ Correcta: **{', '.join(preg['correctas'])}**")
+                
+                with col_op2:
+                    # Entrega anticipada: el reporte se calcula sin contar las
+                    # no respondidas como erróneas y sin registrarlas como
+                    # fallo en el historial (no se intentaron).
+                    if not st.session_state.get("confirmar_terminar_examen", False):
+                        if st.button("🏁 Terminar examen", use_container_width=True):
+                            st.session_state.confirmar_terminar_examen = True
+                            st.rerun()
+                    else:
+                        sin_responder = total - len(st.session_state.respuestas_usuario)
+                        st.warning(
+                            f"Te quedan **{sin_responder}** sin responder. "
+                            "Al terminar ahora **no** cuentan como erróneas."
+                        )
+                
+                if st.session_state.get("confirmar_terminar_examen", False):
+                    col_si, col_no = st.columns(2)
+                    with col_si:
+                        if st.button("✅ Sí, terminar", type="primary", use_container_width=True):
+                            with st.spinner("📊 Calculando tus resultados finales..."):
+                                st.session_state.resultado_final = calcular_resultado(
+                                    st.session_state.preguntas_simulador,
+                                    st.session_state.respuestas_usuario,
+                                    contar_no_respondidas_como_incorrectas=False,
+                                )
+                                st.session_state.mostrar_resultados = True
+                                st.session_state.reporte_solo_respondidas = True
+                                _registrar_historial(omitir_no_respondidas=True)
+                            st.session_state.confirmar_terminar_examen = False
+                            st.rerun()
+                    with col_no:
+                        if st.button("✏️ Seguir contestando", use_container_width=True):
+                            st.session_state.confirmar_terminar_examen = False
+                            st.rerun()
 
 # ========================================
 # PESTAÑA 5: SECCIÓN ERRORES REITERADOS

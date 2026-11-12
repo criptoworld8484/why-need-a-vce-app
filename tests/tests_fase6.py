@@ -15,7 +15,7 @@ import sys
 import tempfile
 from datetime import datetime, timedelta
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 
 from src.historial import (FORMATO_FECHA, cargar_historial, clasificar_intento,
