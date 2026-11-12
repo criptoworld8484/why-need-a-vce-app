@@ -12,14 +12,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 
-fallos = []
-
-
-def check(desc, cond, detail=""):
-    marca = "OK " if cond else "FAIL"
-    print(f"  [{marca}] {desc} {detail}")
-    if not cond:
-        fallos.append(desc)
+from tests.comun import check, cerrar
 
 
 BANEADOS = ("build_installer", "setup.iss", "build/build_", "build\\build_",
@@ -79,5 +72,4 @@ check("todo comando de test documentado resuelve a un archivo real",
       bool(comandos_doc) and not faltan_docs,
       f"-> documentados: {len(comandos_doc)}, rotos: {faltan_docs}")
 
-print("\n" + ("TODOS OK" if not fallos else f"{len(fallos)} FALLOS: {fallos}"))
-sys.exit(1 if fallos else 0)
+cerrar()

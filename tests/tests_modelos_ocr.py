@@ -15,21 +15,10 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 
-from src.modelos_ocr import (
-    MODELO_OCR_PREDEFINIDO,
-    es_error_modelo_no_disponible,
-    filtrar_modelos_ocr,
-    modelo_ocr_preferido,
-)
-
-fallos = []
-
-
-def check(desc, cond, detail=""):
-    marca = "OK " if cond else "FAIL"
-    print(f"  [{marca}] {desc} {detail}")
-    if not cond:
-        fallos.append(desc)
+from src.modelos_ocr import (MODELO_OCR_PREDEFINIDO, es_error_modelo_no_disponible,
+                             filtrar_modelos_ocr, listar_modelos_ocr,
+                             modelo_ocr_preferido)
+from tests.comun import check, cerrar
 
 
 print("== filtrar_modelos_ocr ==")
@@ -75,9 +64,21 @@ check("una cuenta antigua conserva su modelo disponible",
       modelo_ocr_preferido(["gemini-2.5-flash"]) == "gemini-2.5-flash",
       f"-> {modelo_ocr_preferido(['gemini-2.5-flash'])}")
 
+check("sin coincidencias con la lista preferida, usa el primero",
+      modelo_ocr_preferido(["gemini-2.0-x", "gemini-1.9-x"]) == "gemini-2.0-x",
+      f"-> {modelo_ocr_preferido(['gemini-2.0-x', 'gemini-1.9-x'])}")
+
 check("sin modelos devuelve el modelo por defecto",
       modelo_ocr_preferido([]) == MODELO_OCR_PREDEFINIDO,
       f"-> {modelo_ocr_preferido([])}")
+
+print("\n== listar_modelos_ocr sin red ==")
+modelos, motivo = listar_modelos_ocr("")
+check("sin API key devuelve None y un motivo",
+      modelos is None and bool(motivo), f"-> {motivo}")
+modelos, motivo = listar_modelos_ocr("   ")
+check("una key en blanco también", modelos is None and bool(motivo),
+      f"-> {motivo}")
 
 print("\n== es_error_modelo_no_disponible ==")
 error_real = ("Error: 404 NOT_FOUND. {'error': {'code': 404, 'message': "
@@ -97,5 +98,4 @@ check("no confunde un 429 de cuota",
 check("no confunde un error interno",
       not es_error_modelo_no_disponible("500 INTERNAL: backend error"))
 
-print("\n" + ("TODOS OK" if not fallos else f"{len(fallos)} FALLOS: {fallos}"))
-sys.exit(1 if fallos else 0)
+cerrar()

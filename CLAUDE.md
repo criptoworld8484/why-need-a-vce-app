@@ -25,6 +25,7 @@ Tests are plain-Python scripts run directly (no pytest/CI): `python tests/tests_
 `src/` holds the extracted modules:
 - `src/paths.py` — the app-dir vs data-dir split (see below), PyInstaller-`frozen`-aware.
 - `src/modelos_ocr.py` — Gemini model listing per API key, preference/default selection, unavailable-model error detection.
+- `src/ocr.py` — `extract_text_from_image()`: the Gemini OCR extraction and its error contract (see below).
 - `src/atajos_teclado.py` + `src/atajos_componente/` — simulator keyboard shortcuts (Streamlit 1.54 has no keyboard API): a vanilla component captures keys (whether focus is in the parent document or its own iframe) and returns them as a component value; Python decides the navigation, so nothing depends on the DOM of the buttons.
 - `src/api_key_manager.py` — Gemini API key encrypted at rest with Fernet in the config dir; degrades to no-op if `cryptography` is missing.
 - `src/seleccion.py` — pure (Streamlit-free) exam pool selection: ordinal range, tag filter, duplicate detection. Kept importable so it can be unit-tested without a Streamlit session.
@@ -58,7 +59,7 @@ Image paths are stored **relative** to the data dir in JSON (`get_relative_image
 
 ### OCR
 
-`extract_text_from_image()` calls Gemini (model chosen in the "⚙️ Modelo" expander — the options are listed live from the API via `src/modelos_ocr.py` because availability depends on the API-key account, with `gemini-3.8-flash` as preferred default), strips markdown fences, and validates the JSON contract `{"pregunta": str, "respuestas": list}`. It **always returns a dict** — either the parsed data or `{"error": ...}`, with the sentinel `error == "cuota_excedida"` (plus a `mensaje`) for 429/quota, `error == "modelo_no_disponible"` (plus `mensaje`/`detalle`) for the 404 of a model retired for the account, and exponential-backoff retries otherwise. Callers must branch on `"error" in result`.
+`extract_text_from_image()` (`src/ocr.py`) calls Gemini (model chosen in the "⚙️ Modelo" expander — the options are listed live from the API via `src/modelos_ocr.py` because availability depends on the API-key account, with `gemini-3.8-flash` as preferred default), strips markdown fences, and validates the JSON contract `{"pregunta": str, "respuestas": list}`. It **always returns a dict** — either the parsed data or `{"error": ...}`, with the sentinel `error == "cuota_excedida"` (plus a `mensaje`) for 429/quota, `error == "modelo_no_disponible"` (plus `mensaje`/`detalle`) for the 404 of a model retired for the account, and exponential-backoff retries otherwise. Callers must branch on `"error" in result`.
 
 ### Simulator / timer
 

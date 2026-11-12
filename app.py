@@ -42,12 +42,7 @@ try:
 except Exception:
     OPENCV_AVAILABLE = False
 
-try:
-    from google import genai
-    from google.genai import types
-    GENAI_AVAILABLE = True
-except Exception:
-    GENAI_AVAILABLE = False
+from src.ocr import GENAI_AVAILABLE, extract_text_from_image
 
 try:
     from streamlit_autorefresh import st_autorefresh
@@ -830,141 +825,6 @@ def aleatorizar_pregunta(pregunta):
     
     return pregunta_aleatoria
 
-# --- FUNCIÓN OCR ---
-def extract_text_from_image(image_path, api_key, modelo=MODELO_OCR_PREDEFINIDO, max_retries=2):
-    if not GENAI_AVAILABLE:
-        return {"error": "google.genai no está instalado. Ejecuta: pip install google-genai"}
-    
-    for intento in range(max_retries):
-        try:
-            client = genai.Client(api_key=api_key)
-            
-            img = Image.open(image_path)
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-            
-            import io
-            img_byte_arr = io.BytesIO()
-            img.save(img_byte_arr, format='JPEG', quality=95)
-            img_bytes = img_byte_arr.getvalue()
-            
-            prompt = """
-            Eres un asistente experto en analizar capturas de pantalla de exámenes de certificación.
-            Extrae el texto de la imagen y devuélvelo ESTRICTAMENTE en este formato JSON:
-            {
-                "pregunta": "Aquí el texto de la pregunta completa",
-                "respuestas": [
-                    "A) texto de la primera opción (usa \\n para saltos de línea si la opción tiene múltiples líneas)",
-                    "B) texto de la segunda opción",
-                    ...
-                ]
-            }
-            
-            IMPORTANTE:
-            - Si una opción tiene múltiples líneas (código, listas, texto largo), preserva el formato usando \\n
-            - Ignora cualquier texto de interfaz (botones, logos, horas, etc.)
-            - Si no hay opciones de respuesta, deja la lista "respuestas" vacía
-            - Devuelve SOLO el JSON válido, sin markdown
-            """
-            
-            response = client.models.generate_content(
-                model=modelo,
-                contents=[
-                    prompt,
-                    types.Part.from_bytes(
-                        data=img_bytes,
-                        mime_type='image/jpeg'
-                    )
-                ]
-            )
-            
-            if not response or not response.text:
-                return {"error": "Gemini no devolvió contenido."}
-            
-            texto_limpio = response.text.strip()
-            
-            # Limpiar marcas de markdown
-            if texto_limpio.startswith("```json"):
-                texto_limpio = texto_limpio[7:].rstrip("```").strip()
-            elif texto_limpio.startswith("```"):
-                texto_limpio = texto_limpio[3:].rstrip("```").strip()
-            
-            # Validar que no esté vacío después de limpiar
-            if not texto_limpio:
-                return {"error": "La respuesta está vacía después de procesar."}
-            
-            try:
-                data = json.loads(texto_limpio)
-            except json.JSONDecodeError:
-                return {"error": f"JSON inválido. La respuesta no es un JSON válido."}
-            
-            # Validar estructura del JSON
-            if not isinstance(data, dict):
-                return {"error": "JSON inválido: la raíz debe ser un objeto."}
-            
-            if "pregunta" not in data:
-                return {"error": "JSON inválido: falta el campo 'pregunta'."}
-            
-            if "respuestas" not in data:
-                return {"error": "JSON inválido: falta el campo 'respuestas'."}
-            
-            # Validar tipos
-            if not isinstance(data.get("pregunta"), str):
-                return {"error": "JSON inválido: 'pregunta' debe ser texto."}
-            
-            if not isinstance(data.get("respuestas"), list):
-                return {"error": "JSON inválido: 'respuestas' debe ser una lista."}
-                
-            return data
-            
-        except json.JSONDecodeError as e:
-            texto_error = response.text[:200] if response and hasattr(response, 'text') else 'Sin respuesta'
-            return {"error": f"Error al parsear JSON: {str(e)}\n\nRespuesta: {texto_error}..."}
-        
-        except Exception as e:
-            error_str = str(e)
-            
-            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
-                retry_match = re.search(r'retry in (\d+(?:\.\d+)?)', error_str)
-                wait_seconds = int(float(retry_match.group(1))) if retry_match else 30
-                
-                return {
-                    "error": "cuota_excedida",
-                    "mensaje": f"""🚫 **Cuota de API agotada**
-
-Has excedido los límites gratuitos de Google Gemini.
-
-**Soluciones:**
-1. ⏳ Espera {wait_seconds} segundos y reintenta
-2. 🔑 Crea una nueva API Key: https://makersuite.google.com/app/apikey
-3. ✍️ Usa la pestaña "Ingesta Manual"
-                    """.strip()
-                }
-            
-            if es_error_modelo_no_disponible(error_str):
-                # Sin reintentos: el modelo no existe para esta cuenta y
-                # volver a llamar devuelve el mismo 404.
-                return {
-                    "error": "modelo_no_disponible",
-                    "mensaje": f"""⚠️ **Modelo no disponible**
-
-El modelo `{modelo}` no está disponible para tu API Key (Google retira
-modelos para usuarios nuevos aunque sigan activos en cuentas antiguas).
-
-**Solución:** en **⚙️ Modelo** elige otro de la lista (por ejemplo
-`{MODELO_OCR_PREDEFINIDO}`) y vuelve a procesar la imagen.
-                    """.strip(),
-                    "detalle": error_str,
-                }
-            
-            if intento < max_retries - 1:
-                time.sleep(2 ** intento)
-                continue
-            
-            return {"error": f"Error: {str(e)}"}
-    
-    return {"error": "Máximo de reintentos alcanzado"}
-
 # --- FUNCIÓN PARA LIMPIAR FORMULARIO MANUAL ---
 def limpiar_formulario_manual():
     st.session_state.manual_enunciado = ""
@@ -1208,23 +1068,33 @@ elif pestana_seleccionada == "📸 Extracción OCR":
                 # La disponibilidad de modelos depende de la cuenta de la API
                 # Key (los retirados para usuarios nuevos siguen activos en
                 # cuentas antiguas), así que la lista se consulta a la API y
-                # se cachea mientras la key no cambie.
+                # se cacheia por key con TTL: un fallo transitorio de red no
+                # deja la lista de reserva clavada el resto de la sesión.
                 api_key_ocr_actual = st.session_state.get("api_key_ocr", "")
-                cache_modelos = st.session_state.get("modelos_ocr_cache")
-                if not cache_modelos or cache_modelos[0] != api_key_ocr_actual:
-                    disponibles = listar_modelos_ocr(api_key_ocr_actual) if api_key_ocr_actual.strip() else None
-                    st.session_state.modelos_ocr_cache = (api_key_ocr_actual, disponibles)
-                    cache_modelos = st.session_state.modelos_ocr_cache
+                cache_modelos = st.session_state.get("modelos_ocr_cache") or {}
+                if (cache_modelos.get("api_key") != api_key_ocr_actual
+                        or time.time() - cache_modelos.get("ts", 0) > 120):
+                    if api_key_ocr_actual.strip():
+                        modelos_api, motivo_fallo = listar_modelos_ocr(api_key_ocr_actual)
+                    else:
+                        modelos_api, motivo_fallo = None, None
+                    cache_modelos = {
+                        "api_key": api_key_ocr_actual,
+                        "modelos": modelos_api,
+                        "motivo": motivo_fallo,
+                        "ts": time.time(),
+                    }
+                    st.session_state.modelos_ocr_cache = cache_modelos
                 
-                modelos_disponibles = cache_modelos[1] or MODELOS_OCR_RESERVA
+                modelos_disponibles = cache_modelos.get("modelos") or MODELOS_OCR_RESERVA
                 modelo_seleccionado = st.selectbox(
                     "Modelo",
                     options=modelos_disponibles,
                     index=modelos_disponibles.index(modelo_ocr_preferido(modelos_disponibles))
                 )
                 
-                if cache_modelos[1] is None and api_key_ocr_actual.strip():
-                    st.caption("⚠️ No se pudo consultar los modelos a la API; mostrando la lista habitual.")
+                if cache_modelos.get("modelos") is None and api_key_ocr_actual.strip():
+                    st.caption(f"⚠️ Mostrando la lista habitual: {cache_modelos.get('motivo')}.")
                 
                 if st.button("🔄 Actualizar lista de modelos"):
                     st.session_state.pop("modelos_ocr_cache", None)

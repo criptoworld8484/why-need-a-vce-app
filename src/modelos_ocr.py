@@ -12,18 +12,11 @@ import re
 
 MODELO_OCR_PREDEFINIDO = "gemini-3.8-flash"
 
-# Usada solo cuando no se puede consultar la API (sin key, sin red...).
-MODELOS_OCR_RESERVA = [
-    "gemini-3.8-flash",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-2.5-flash",
-]
-
-# Orden de preferencia para el modelo por defecto: estables y con tier
-# gratuito primero (gemini-4-argon es de pago, nunca por defecto).
-_MODELOS_PREFERIDOS = [
+# Única fuente de modelos conocidos, en orden de preferencia (estables y con
+# tier gratuito primero; gemini-4-argon es de pago y nunca por defecto). Es a
+# la vez la lista de reserva cuando la API no se puede consultar y el orden
+# para elegir el modelo por defecto: una sola lista que mantener.
+MODELOS_OCR_RESERVA = (
     "gemini-3.8-flash",
     "gemini-3.7-flash",
     "gemini-3.6-flash",
@@ -31,7 +24,11 @@ _MODELOS_PREFERIDOS = [
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
     "gemini-2.5-flash",
-]
+)
+
+# Un error de cuota nunca es 'modelo no disponible', aunque su texto mencione
+# 404 o 'not found' (p. ej. en metadatos o pistas de reintento).
+_INDIOS_CUOTA = ("429", "resource_exhausted", "quota")
 
 # Subcadenas que descartan modelos no aptos para extraer texto de imágenes.
 _NO_APTOS_OCR = (
@@ -43,10 +40,6 @@ _NO_APTOS_OCR = (
 _INDIOS_MODELO_NO_DISPONIBLE = (
     "404", "not_found", "not found", "no longer available", "does not exist",
 )
-
-# Un error de cuota nunca es 'modelo no disponible', aunque su texto mencione
-# 404 o 'not found' (p. ej. en metadatos o pistas de reintento).
-_INDIOS_CUOTA = ("429", "resource_exhausted", "quota")
 
 
 def _clave_version(nombre):
@@ -88,7 +81,7 @@ def modelo_ocr_preferido(nombres):
     MODELO_OCR_PREDEFINIDO.
     """
     nombres = nombres or []
-    for preferido in _MODELOS_PREFERIDOS:
+    for preferido in MODELOS_OCR_RESERVA:
         if preferido in nombres:
             return preferido
     return nombres[0] if nombres else MODELO_OCR_PREDEFINIDO
@@ -110,17 +103,26 @@ def es_error_modelo_no_disponible(texto_error):
 
 
 def listar_modelos_ocr(api_key):
-    """Lista los modelos de OCR disponibles para la API Key, o None.
+    """Lista los modelos de OCR disponibles para la API Key.
 
-    Devuelve None cuando no se pudo consultar (sin SDK, key inválida, sin
-    red...); el llamador decide si recurre a MODELOS_OCR_RESERVA.
+    Devuelve (modelos, motivo): 'modelos' es la lista apta para OCR o None si
+    no se pudo obtener; en ese caso 'motivo' dice por qué (sin key, SDK
+    ausente, error de red, la API sin modelos aptos...). El llamador decide si
+    recurre a MODELOS_OCR_RESERVA y puede mostrar el motivo. La consulta va
+    con timeout acotado para no colgar la pestaña OCR si la red se cuelga.
     """
     if not api_key or not api_key.strip():
-        return None
+        return None, "sin API key configurada"
     try:
         from google import genai
-
-        client = genai.Client(api_key=api_key)
+        from google.genai import types
+    except Exception:
+        return None, "google-genai no está instalado"
+    try:
+        client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=8000),
+        )
         nombres = []
         for modelo in client.models.list():
             acciones = getattr(modelo, "supported_actions", None) or []
@@ -128,6 +130,9 @@ def listar_modelos_ocr(api_key):
                 continue
             nombres.append(modelo.name)
         filtrados = filtrar_modelos_ocr(nombres)
-        return filtrados or None
-    except Exception:
-        return None
+        if not filtrados:
+            return None, "la API no devolvió modelos aptos para OCR"
+        return filtrados, None
+    except Exception as e:
+        detalle = str(e).strip().splitlines()
+        return None, f"no se pudo consultar la API: {detalle[0][:120] if detalle else type(e).__name__}"
